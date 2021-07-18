@@ -106,7 +106,6 @@ def process_image(n_img, n_name):
 
     return imgYUB
 
-
-name = "drake"
+name = "will_smith"
 img = cv2.imread(f"../images/{name}.jpg")
 img = process_image(img, name)
