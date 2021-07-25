@@ -1,10 +1,11 @@
 import cv2
 import mediapipe as mp
+import numpy
 import numpy as np
 from mediapipe.framework.formats.landmark_pb2 import NormalizedLandmarkList
 from matplotlib.path import Path
 from shapely.geometry import Polygon
-from sklearn.decomposition import NMF
+from sklearn.decomposition import NMF, KernelPCA
 
 
 mpDraw = mp.solutions.drawing_utils
@@ -17,6 +18,7 @@ LCHEEK_POINTS = [31, 35, 143, 116, 123, 147, 213, 192, 214, 212, 216, 206, 203, 
 RCHEEK_POINTS = [261, 265, 372, 345, 352, 376, 433, 434, 432, 436, 426, 423, 266, 330, 348, 449, 448]
 
 
+# Given an image and points to take measurements from, return "valid" points in the image
 def get_points(n_img, landmarks):
     i_h, i_w, i_c = n_img.shape
     for faceLms in landmarks[:1]:
@@ -68,10 +70,10 @@ def get_stats(n_img, arr):
             u.append(temp[1])
             b.append(temp[2])
 
-    y_mean, u_mean, b_mean = np.mean(y), np.mean(u), np.mean(b)
-    y_std, u_std, b_std = np.std(y), np.std(u), np.std(b)
+    means = (np.mean(y), np.mean(u), np.mean(b))
+    stds = (np.std(y), np.std(u), np.std(b))
 
-    return (y_mean, u_mean, b_mean), (y_std, u_std, b_std)
+    return means, stds
 
 
 # Given an image, means/stdevs, and points, return only the points within 2 stds
@@ -108,6 +110,26 @@ def display_points(n_img, points, n_name):
     cv2.imwrite(f"../results/{n_name}_INVERT.jpg", invert)
 
 
+def calculate_color(n_imgYUB, arr):
+    values = numpy.array([n_imgYUB[x, y] for x, y in arr])
+    model = NMF(n_components=2, init='random', random_state=0, max_iter=500)
+    W = model.fit_transform(values)
+    H = model.components_
+    print("values", values.shape)
+    print("w", W.shape)
+    print("h", H.shape)
+
+    specular = sum(H[1]) > sum(H[0])
+    diffuse = 1 - specular
+
+    transformer = KernelPCA(kernel='poly')
+
+    X_transformed = transformer.fit_transform([H[diffuse]])
+    print("x_transformed", X_transformed)
+
+    return
+
+
 def process_image(n_img, n_name):
     imgRGB = cv2.cvtColor(n_img, cv2.COLOR_BGR2RGB)
     imgYUB = cv2.cvtColor(n_img, cv2.COLOR_BGR2YUV)
@@ -115,6 +137,8 @@ def process_image(n_img, n_name):
 
     if results.multi_face_landmarks:
         points = get_points(imgYUB, results.multi_face_landmarks)
+        for p in points[0:1]:
+            calculate_color(imgYUB, p)
         # display_points(n_img, points, n_name)
 
     return imgYUB
