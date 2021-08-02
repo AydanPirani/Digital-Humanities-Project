@@ -47,7 +47,7 @@ def get_points(n_img, landmarks):
                 if lcheek_area/rcheek_area > 0.5 and lcheek_path.contains_point((j, i)):
                     lcheek_pts.add((i, j))
 
-                # Same process ass mentioned above, but with right cheek
+                # Same process as mentioned above, but with right cheek
                 if rcheek_area/lcheek_area > 0.5 and rcheek_path.contains_point((j, i)):
                     rcheek_pts.add((i, j))
 
@@ -80,16 +80,16 @@ def get_stats(n_img, arr):
 def clean_data(n_img, points, means, stds):
     print("pre-cleaning", len(points))
 
-    y_mean, u_mean, b_mean = means
-    y_std, u_std, b_std = stds
+    y_mean, u_mean, v_mean = means
+    y_std, u_std, v_std = stds
 
-    y_range, u_range, b_range = (y_mean - 2*y_std, y_mean + 2*y_std), (u_mean - 2*u_std, u_mean + 2*u_std), (b_mean - 2*b_std, b_mean + 2*b_std)
+    y_range, u_range, v_range = (y_mean - 2*y_std, y_mean + 2*y_std), (u_mean - 2*u_std, u_mean + 2*u_std), (v_mean - 2*v_std, v_mean + 2*v_std)
 
     new_points = []
     for p0, p1 in points:
         temp = n_img[p0, p1]
         # Check if point is within given ranges -> if so, add to new set
-        if (y_range[0] <= temp[0] <= y_range[1]) and (u_range[0] <= temp[1] <= u_range[1]) and (b_range[0] <= temp[2] <= b_range[1]):
+        if (y_range[0] <= temp[0] <= y_range[1]) and (u_range[0] <= temp[1] <= u_range[1]) and (v_range[0] <= temp[2] <= v_range[1]):
             new_points.append((p0, p1))
 
     print("post-cleaning", len(new_points))
@@ -116,49 +116,60 @@ def display_points(n_img, points, n_name):
 
 
 def calculate_color(n_imgYUV, arr):
-    print("ARR", len(arr))
-    values = numpy.array([n_imgYUV[x, y] for x, y in arr])
-    values = values / 256
-    print(np.unique(values))
-    model = NMF(n_components=2, init='random', random_state=0, max_iter=500)
+    values = np.array([n_imgYUV[x, y] for x, y in arr]) / 256
+    print(values[:10]*256)
+    # print([256 * sum(v)/len(v) for v in values])
+    model = NMF(n_components=2, init='nndsvd', random_state=0, max_iter=500)
     W = model.fit_transform(values)
     H = model.components_
-    print("values", values.shape)
     print("W", W.shape)
     print("H", H.shape, H)
 
-    specular = int(sum(H[1]) > sum(H[0]))
-    diffuse = 1 - specular
+    values = np.rot90(values)
+    print(np.array([256 * sum(v)/len(v) for v in values]))
 
+
+    # TODO: test zeroth element of each row of H vs. the whole rowsum
+    specular = int(sum(H[1]) < sum(H[0]))
+    diffuse = 1 - specular
     index = diffuse
 
-    print("INDEX", index)
-    print("H0", sum(H[0]), H[0].shape)
-    print("H1", sum(H[1]), H[1].shape)
+    # H[specular] = [0] * 3
+    values = np.dot(W, H)
+    # values = W * H
+    # print("NEW MULTIPLIED VALUES", values)
 
+    # print("INDEX", index)
+    # print("H0", sum(H[0]), H[0].shape)
+    # print("H1", sum(H[1]), H[1].shape)
     X = np.rot90(np.array([H[index]]))
     values = np.rot90(values)
-    print("X", X.shape)
+    # print("X", X.shape)
     print("values", values.shape, values)
-
-    transformer = KernelPCA(n_components=1, kernel="rbf")
-    transformer.fit(values)
-    values = transformer.transform(values)
-    print("values", values.shape, values)
+    values = np.array([256 * sum(v)/len(v) for v in values])
+    # transformer = KernelPCA(n_components=1, kernel="poly")
+    # [x * 3] -> [n_c * 3]
+    # transformer = transformer.fit(values)
+    # values = transformer.fit_transform(values)
+    # print("values", values.shape, values)
+    print(values)
     print("---------------")
 
     return values
 
 
 def process_image(n_img, n_name):
-    imgRGB = cv2.cvtColor(n_img, cv2.COLOR_BGR2RGB)
     imgYUV = cv2.cvtColor(n_img, cv2.COLOR_BGR2YUV)
+    imgRGB = cv2.cvtColor(n_img, cv2.COLOR_BGR2RGB)
+    # imgRGB = n_img
+    # imgYUV = cv2.cvtColor(n_img, cv2.COLOR_RGB2YUV)
+
     results = faceMesh.process(imgRGB)
 
     if results.multi_face_landmarks:
-        points = get_points(imgYUV, results.multi_face_landmarks)
+        patches = get_points(imgYUV, results.multi_face_landmarks)
         y_s, u_s, v_s = 0, 0, 0
-        for p in points:
+        for p in patches:
             y, u, v = calculate_color(imgYUV, p)
             y_s += y
             u_s += u
@@ -168,6 +179,12 @@ def process_image(n_img, n_name):
 
     return imgYUV
 
-name = "morgan_freeman"
-img = cv2.imread(f"../images/{name}.jpg")
+name = "will_smith2"
+img = cv2.imread(f"../images/{name}.jpg", flags=cv2.IMREAD_COLOR)
+print(img.shape)
 img = process_image(img, name)
+# cv2.imwrite(f"../results/{name}_RGB.jpg", img)
+# imgYUV = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
+# imgYUV = cv2.cvtColor(imgYUV, cv2.COLOR_YUV2BGR)
+# cv2.imwrite(f"../results/{name}_YUV.jpg", imgYUV)
+#
