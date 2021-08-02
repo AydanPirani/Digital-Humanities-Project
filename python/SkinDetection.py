@@ -5,7 +5,7 @@ import numpy as np
 from mediapipe.framework.formats.landmark_pb2 import NormalizedLandmarkList
 from matplotlib.path import Path
 from shapely.geometry import Polygon
-from sklearn.decomposition import NMF, KernelPCA
+from sklearn.decomposition import NMF, KernelPCA, PCA
 
 
 mpDraw = mp.solutions.drawing_utils
@@ -97,11 +97,16 @@ def clean_data(n_img, points, means, stds):
 
 
 def display_points(n_img, points, n_name):
+    s = set()
+    for arr in points:
+        for p in arr:
+            s.add(p)
+
     invert = n_img.copy()
     i_h, i_w, i_c = n_img.shape
     for i in range(i_h):
         for j in range(i_w):
-            if (i, j) in points:
+            if (i, j) in s:
                 invert[i, j] = [0, 0, 0]
             else:
                 n_img[i, j] = [0, 0, 0]
@@ -110,39 +115,59 @@ def display_points(n_img, points, n_name):
     cv2.imwrite(f"../results/{n_name}_INVERT.jpg", invert)
 
 
-def calculate_color(n_imgYUB, arr):
-    values = numpy.array([n_imgYUB[x, y] for x, y in arr])
+def calculate_color(n_imgYUV, arr):
+    print("ARR", len(arr))
+    values = numpy.array([n_imgYUV[x, y] for x, y in arr])
+    values = values / 256
+    print(np.unique(values))
     model = NMF(n_components=2, init='random', random_state=0, max_iter=500)
     W = model.fit_transform(values)
     H = model.components_
     print("values", values.shape)
-    print("w", W.shape)
-    print("h", H.shape)
+    print("W", W.shape)
+    print("H", H.shape, H)
 
-    specular = sum(H[1]) > sum(H[0])
+    specular = int(sum(H[1]) > sum(H[0]))
     diffuse = 1 - specular
 
-    transformer = KernelPCA(kernel='poly')
+    index = diffuse
 
-    X_transformed = transformer.fit_transform([H[diffuse]])
-    print("x_transformed", X_transformed)
+    print("INDEX", index)
+    print("H0", sum(H[0]), H[0].shape)
+    print("H1", sum(H[1]), H[1].shape)
 
-    return
+    X = np.rot90(np.array([H[index]]))
+    values = np.rot90(values)
+    print("X", X.shape)
+    print("values", values.shape, values)
+
+    transformer = KernelPCA(n_components=1, kernel="rbf")
+    transformer.fit(values)
+    values = transformer.transform(values)
+    print("values", values.shape, values)
+    print("---------------")
+
+    return values
 
 
 def process_image(n_img, n_name):
     imgRGB = cv2.cvtColor(n_img, cv2.COLOR_BGR2RGB)
-    imgYUB = cv2.cvtColor(n_img, cv2.COLOR_BGR2YUV)
+    imgYUV = cv2.cvtColor(n_img, cv2.COLOR_BGR2YUV)
     results = faceMesh.process(imgRGB)
 
     if results.multi_face_landmarks:
-        points = get_points(imgYUB, results.multi_face_landmarks)
-        for p in points[0:1]:
-            calculate_color(imgYUB, p)
+        points = get_points(imgYUV, results.multi_face_landmarks)
+        y_s, u_s, v_s = 0, 0, 0
+        for p in points:
+            y, u, v = calculate_color(imgYUV, p)
+            y_s += y
+            u_s += u
+            v_s += v
+        print(y_s/3, u_s/3, v_s/3)
         # display_points(n_img, points, n_name)
 
-    return imgYUB
+    return imgYUV
 
-name = "will_smith"
+name = "morgan_freeman"
 img = cv2.imread(f"../images/{name}.jpg")
 img = process_image(img, name)
