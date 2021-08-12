@@ -3,7 +3,7 @@ import mediapipe as mp
 import numpy as np
 from matplotlib.path import Path
 from shapely.geometry import Polygon
-from sklearn.decomposition import NMF, KernelPCA, PCA
+from sklearn.decomposition import NMF, KernelPCA
 
 
 mpDraw = mp.solutions.drawing_utils
@@ -117,67 +117,76 @@ def display_points(n_img, points, n_name):
 
 def calculate_color(n_img, arr):
 
-    values = np.array([n_img[x, y] for x, y in arr]) / 256
-    model = NMF(n_components=2, init='nndsvd', random_state=0, max_iter=500)
+    values = np.array([n_img[x, y] for x, y in arr])
+    model = NMF(n_components=2, init='nndsvda', random_state=0, max_iter=2000, tol=5e-3, l1_ratio=0.2)
 
     W = model.fit_transform(values)
     H = model.components_
 
-    print("W", W.shape)
-    print("H", H.shape, H)
-
-    # values = np.rot90(values)
-    # print(np.array([256 * sum(v)/len(v) for v in values]))
-
-
-    # TODO: test zeroth element of each row of H vs. the whole rowsum
-    specular = int(sum(H[1]) < sum(H[0]))
+    specular = int(sum(H[1]) > sum(H[0]))
     diffuse = 1 - specular
-    index = diffuse
 
-    # H[specular] = [0] * 3
-    values = np.dot(W, H)
-    # values = W * H
-    # print("NEW MULTIPLIED VALUES", values)
+    A, B = [], []
+    for a, b in W:
+        A.append(a)
+        B.append(b)
+    A, B = np.array(A), np.array(B)
+    X = np.array([A, B])
 
-    # print("INDEX", index)
-    # print("H0", sum(H[0]), H[0].shape)
-    # print("H1", sum(H[1]), H[1].shape)
-    X = np.rot90(np.array([H[index]]))
-    values = np.rot90(values)
-    # print("X", X.shape)
-    print("values", values.shape, values)
-    values = np.array([256 * sum(v)/len(v) for v in values])
-    # transformer = KernelPCA(n_components=1, kernel="poly")
-    # [x * 3] -> [n_c * 3]
-    # transformer = transformer.fit(values)
-    # values = transformer.fit_transform(values)
-    # print("values", values.shape, values)
+    print("X", X.shape)
+
+    transformer = KernelPCA(n_components=1, kernel="poly")
+    X = transformer.fit_transform(X)
+
+    H[specular] = [0, 0, 0]
+    H[diffuse] = H[diffuse]
+    print(H)
+    X = np.multiply(X, H)
+
+    print(X)
+    # return [i[0] * 256 for i in X]
+    return [abs(i) for i in X[diffuse]]
+
+def test_calculate(n_img, arr):
+    values = np.rot90(np.array([n_img[x, y] for x, y in arr]))
+    r_s, g_s, b_s = 0, 0, 0
+
+    for x, y in arr:
+        r, g, b = n_img[x, y]
+        r_s += r
+        g_s += g
+        b_s += b
+
     print(values)
-    print("---------------")
+    return [sum(i)/len(i) for i in values]
+    return r_s/len(arr), g_s/len(arr), b_s/len(arr)
 
-    return values
-
-
-def process_image(n_img, n_name):
+def process_image(n_img, n_name, display=False):
     imgRGB = cv2.cvtColor(n_img, cv2.COLOR_BGR2RGB)
-
     results = faceMesh.process(imgRGB)
 
     if results.multi_face_landmarks:
         patches = get_points(imgRGB, results.multi_face_landmarks)
         r_s, g_s, b_s = 0, 0, 0
+        total = 3
         for p in patches:
-            r, g, b = calculate_color(imgRGB, p)
+            val = calculate_color(imgRGB, p)
+            print("OUTPUT", val)
+            r, g, b = val
+            # r, g, b = test_calculate(imgRGB, p)
             r_s += r
             g_s += g
             b_s += b
-        print(r_s/3, g_s/3, b_s/3)
-        display_points(n_img, patches, n_name)
+
+        print(r_s/total, g_s/total, b_s/total)
+        if display:
+            display_points(n_img, patches, n_name)
 
     return imgRGB
 
 
-name = "will_smith2"
+name = "ariana_grande"
 img = cv2.imread(f"../images/{name}.jpg", flags=cv2.IMREAD_COLOR)
-img = process_image(img, name)
+display = True
+
+process_image(img, name)
