@@ -10,10 +10,15 @@ mpDraw = mp.solutions.drawing_utils
 mpFaceMesh = mp.solutions.face_mesh
 faceMesh = mpFaceMesh.FaceMesh(max_num_faces=2)
 
+# Landmarks for each point, obtained via https://github.com/google/mediapipe/issues/1615
 FOREHEAD_POINTS = [251, 284, 332, 297, 338, 10, 109, 67, 103, 54, 21, 162, 139, 70, 63, 105, 66, 107,
                    9, 336, 296, 334, 293, 300, 383, 368, 389]
 LCHEEK_POINTS = [31, 35, 143, 116, 123, 147, 213, 192, 214, 212, 216, 206, 203, 36, 101, 119, 229, 228]
 RCHEEK_POINTS = [261, 265, 372, 345, 352, 376, 433, 434, 432, 436, 426, 423, 266, 330, 348, 449, 448]
+
+# USER INPUT VALUES, DEPENDENT ON TEST RUNS
+POINTS_THRESHOLD = 20 # Minimum points needed in a skin patch for it to "count"
+DISPLAY_POINTS = True # If true, visualizes the points selected
 
 
 # Given an image and points to take measurements from, return "valid" points in the image
@@ -32,25 +37,32 @@ def get_points(n_img, landmarks):
 
         lcheek_area, rcheek_area = Polygon(lcheek_landmarks).area, Polygon(rcheek_landmarks).area
 
-        forehead_pts = set() # Set of all pixels to change
-        rcheek_pts, lcheek_pts = set(), set()
+        forehead_pts = [] # Array of all pixels in the given area
+        rcheek_pts, lcheek_pts = [], []
 
         # Iterate through all pixels in image, check if pixel in path, then add
         for i in range(i_h):
             for j in range(i_w):
+                # Check if point in the given shape - if so, add to array
                 if forehead_path.contains_point((j, i)):
-                    forehead_pts.add((i, j))
+                    forehead_pts.append((i, j))
 
-                # Check if the left cheek is at least 1/2 the size of the right cheek - if so, add to points
-                if lcheek_area/rcheek_area > 0.5 and lcheek_path.contains_point((j, i)):
-                    lcheek_pts.add((i, j))
+                # Same process as mentioned above, but with left cheek
+                if lcheek_path.contains_point((j, i)):
+                    lcheek_pts.append((i, j))
 
                 # Same process as mentioned above, but with right cheek
-                if rcheek_area/lcheek_area > 0.5 and rcheek_path.contains_point((j, i)):
-                    rcheek_pts.add((i, j))
+                if rcheek_path.contains_point((j, i)):
+                    rcheek_pts.append((i, j))
+
+    # Check if cheeks don't have enough points - if so, then array becomes nullified
+    if len(lcheek_pts) < POINTS_THRESHOLD:
+        lcheek_pts = []
+
+    if len(rcheek_pts) < POINTS_THRESHOLD:
+        rcheek_pts = []
 
     # Return all the points that are within 2 standard deviations of RGB values
-
     means, stds = get_stats(n_img, [forehead_pts, lcheek_pts, rcheek_pts])
 
     return [clean_data(n_img, forehead_pts, means, stds),
@@ -60,23 +72,26 @@ def get_points(n_img, landmarks):
 
 # Return the mean and stdevs for RGB values within the image, for select points
 def get_stats(n_img, arr):
-    r, g, b = [], [], []
+    r_vals, g_vals, b_vals = [], [], []
 
     for points in arr:
         for p0, p1 in points:
             temp = n_img[p0, p1]
-            r.append(temp[0])
-            g.append(temp[1])
-            b.append(temp[2])
+            r_vals.append(temp[0])
+            g_vals.append(temp[1])
+            b_vals.append(temp[2])
 
-    means = (np.mean(r), np.mean(g), np.mean(b))
-    stds = (np.std(r), np.std(g), np.std(b))
+    means = (np.mean(r_vals), np.mean(g_vals), np.mean(b_vals))
+    stds = (np.std(r_vals), np.std(g_vals), np.std(b_vals))
 
     return means, stds
 
 
 # Given an image, means/stdevs, and points, return only the points within 2 stds
 def clean_data(n_img, points, means, stds):
+    if len(points) == 0:
+        print("no elements in face, returning []")
+        return points
     print("pre-cleaning", len(points))
 
     r_mean, g_mean, b_mean = means
@@ -115,51 +130,32 @@ def display_points(n_img, points, n_name):
     cv2.imwrite(f"../results/{n_name}_INVERT.jpg", invert)
 
 
+# Calculate average color of a skin patch, ASSUMING that the array has AT LEAST ONE valid point in it
 def calculate_color(n_img, arr):
-
     values = np.array([n_img[x, y] for x, y in arr])
-    model = NMF(n_components=2, init='nndsvda', random_state=0, max_iter=2000, tol=5e-3, l1_ratio=0.2)
 
-    W = model.fit_transform(values)
-    H = model.components_
+    NMF_model = NMF(n_components=2, init='nndsvda', random_state=0, max_iter=2000, tol=5e-3, l1_ratio=0.2)
+    KPCA_model = KernelPCA(n_components=1, kernel="poly")
 
+    # Results of NMF operation
+    W = NMF_model.fit_transform(values) #size N x 2
+    H = NMF_model.components_ # size 2 x 3
+
+    # Specular = row with a higher sum (bool -> int casting)
     specular = int(sum(H[1]) > sum(H[0]))
     diffuse = 1 - specular
 
-    A, B = [], []
-    for a, b in W:
-        A.append(a)
-        B.append(b)
-    A, B = np.array(A), np.array(B)
-    X = np.array([A, B])
-
-    print("X", X.shape)
-
-    transformer = KernelPCA(n_components=1, kernel="poly")
-    X = transformer.fit_transform(X)
-
+    # Eliminates all impacts of specular component
     H[specular] = [0, 0, 0]
-    H[diffuse] = H[diffuse]
-    print(H)
-    X = np.multiply(X, H)
 
-    print(X)
-    # return [i[0] * 256 for i in X]
-    return [abs(i) for i in X[diffuse]]
+    # Converts W, from N rows of length 2, to 2 rows of length N
+    X = np.rot90(W, axes=(1, 0))
 
-def test_calculate(n_img, arr):
-    values = np.rot90(np.array([n_img[x, y] for x, y in arr]))
-    r_s, g_s, b_s = 0, 0, 0
+    transformed = KPCA_model.fit_transform(X)
+    skin_color = np.multiply(transformed, H) #Array of size 2 x 3, row[specular] = 0, 0, 0
 
-    for x, y in arr:
-        r, g, b = n_img[x, y]
-        r_s += r
-        g_s += g
-        b_s += b
+    return [abs(i) for i in skin_color[diffuse]]
 
-    print(values)
-    return [sum(i)/len(i) for i in values]
-    return r_s/len(arr), g_s/len(arr), b_s/len(arr)
 
 def process_image(n_img, n_name, display=False):
     imgRGB = cv2.cvtColor(n_img, cv2.COLOR_BGR2RGB)
@@ -168,15 +164,14 @@ def process_image(n_img, n_name, display=False):
     if results.multi_face_landmarks:
         patches = get_points(imgRGB, results.multi_face_landmarks)
         r_s, g_s, b_s = 0, 0, 0
-        total = 3
+        total = 0
         for p in patches:
-            val = calculate_color(imgRGB, p)
-            print("OUTPUT", val)
-            r, g, b = val
-            # r, g, b = test_calculate(imgRGB, p)
-            r_s += r
-            g_s += g
-            b_s += b
+            if len(p) > 0:
+                patch_r, patch_g, patch_b = calculate_color(imgRGB, p)
+                r_s += patch_r
+                g_s += patch_g
+                b_s += patch_b
+                total += 1
 
         print(r_s/total, g_s/total, b_s/total)
         if display:
@@ -187,6 +182,6 @@ def process_image(n_img, n_name, display=False):
 
 name = "ariana_grande"
 img = cv2.imread(f"../images/{name}.jpg", flags=cv2.IMREAD_COLOR)
-display = True
 
-process_image(img, name)
+
+process_image(img, name, DISPLAY_POINTS)
