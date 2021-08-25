@@ -2,7 +2,6 @@ import cv2
 import mediapipe as mp
 import numpy as np
 from matplotlib.path import Path
-from shapely.geometry import Polygon
 from sklearn.decomposition import NMF, KernelPCA
 
 
@@ -35,10 +34,8 @@ def get_points(n_img, landmarks):
         lcheek_path = Path(lcheek_landmarks)
         rcheek_path = Path(rcheek_landmarks)
 
-        lcheek_area, rcheek_area = Polygon(lcheek_landmarks).area, Polygon(rcheek_landmarks).area
-
-        forehead_pts = [] # Array of all pixels in the given area
-        rcheek_pts, lcheek_pts = [], []
+        # Array of all pixels in the given area
+        forehead_pts, rcheek_pts, lcheek_pts = [], [], []
 
         # Iterate through all pixels in image, check if pixel in path, then add
         for i in range(i_h):
@@ -56,6 +53,9 @@ def get_points(n_img, landmarks):
                     rcheek_pts.append((i, j))
 
     # Check if cheeks don't have enough points - if so, then array becomes nullified
+    if len(forehead_pts) < POINTS_THRESHOLD:
+        lcheek_pts = []
+
     if len(lcheek_pts) < POINTS_THRESHOLD:
         lcheek_pts = []
 
@@ -113,8 +113,7 @@ def clean_data(n_img, points, means, stds):
 def display_points(n_img, points, n_name):
     s = set()
     for arr in points:
-        for p in arr:
-            s.add(p)
+        s.update(arr)
 
     image = n_img.copy()
     invert = n_img.copy()
@@ -181,7 +180,7 @@ def process_image(n_img, n_name, display=False):
 
 
 name = "ariana_grande"
-img = cv2.imread(f"../images/{name}.jpg", flags=cv2.IMREAD_COLOR)
-
-
+# img = cv2.imread(f"../images/{name}.jpg", flags=cv2.IMREAD_COLOR)
+img = cv2.imread("./kevin.jpg")
+print(img)
 process_image(img, name, DISPLAY_POINTS)
