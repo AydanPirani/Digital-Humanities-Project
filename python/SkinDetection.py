@@ -4,7 +4,6 @@ import numpy as np
 from matplotlib.path import Path
 from sklearn.decomposition import NMF, KernelPCA
 
-
 mpDraw = mp.solutions.drawing_utils
 mpFaceMesh = mp.solutions.face_mesh
 faceMesh = mpFaceMesh.FaceMesh(max_num_faces=2)
@@ -16,8 +15,8 @@ LCHEEK_POINTS = [31, 35, 143, 116, 123, 147, 213, 192, 214, 212, 216, 206, 203, 
 RCHEEK_POINTS = [261, 265, 372, 345, 352, 376, 433, 434, 432, 436, 426, 423, 266, 330, 348, 449, 448]
 
 # USER INPUT VALUES, DEPENDENT ON TEST RUNS
-POINTS_THRESHOLD = 20 # Minimum points needed in a skin patch for it to "count"
-DISPLAY_POINTS = True # If true, visualizes the points selected
+POINTS_THRESHOLD = 20  # Minimum points needed in a skin patch for it to "count"
+DISPLAY_POINTS = True  # If true, visualizes the points selected
 
 
 # Given an image and points to take measurements from, return "valid" points in the image
@@ -97,13 +96,15 @@ def clean_data(n_img, points, means, stds):
     r_mean, g_mean, b_mean = means
     r_std, g_std, b_std = stds
 
-    r_range, g_range, b_range = (r_mean - 2*r_std, r_mean + 2*r_std), (g_mean - 2*g_std, g_mean + 2*g_std), (b_mean - 2*b_std, b_mean + 2*b_std)
+    r_range, g_range, b_range = (r_mean - 2 * r_std, r_mean + 2 * r_std), (g_mean - 2 * g_std, g_mean + 2 * g_std), (
+        b_mean - 2 * b_std, b_mean + 2 * b_std)
 
     new_points = []
     for p0, p1 in points:
         temp = n_img[p0, p1]
         # Check if point is within given ranges -> if so, add to new set
-        if (r_range[0] <= temp[0] <= r_range[1]) and (g_range[0] <= temp[1] <= g_range[1]) and (b_range[0] <= temp[2] <= b_range[1]):
+        if (r_range[0] <= temp[0] <= r_range[1]) and (g_range[0] <= temp[1] <= g_range[1]) and (
+                b_range[0] <= temp[2] <= b_range[1]):
             new_points.append((p0, p1))
 
     print("post-cleaning", len(new_points))
@@ -129,6 +130,12 @@ def display_points(n_img, points, n_name):
     cv2.imwrite(f"../results/{n_name}_INVERT.jpg", invert)
 
 
+# Calculate the perceived brightness of a single pixel, given RGB values, sourced from link below (ITU BT.709)
+# https://stackoverflow.com/questions/596216/formula-to-determine-perceived-brightness-of-rgb-color#596243
+def calculate_luminance(r, g, b):
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
 # Calculate average color of a skin patch, ASSUMING that the array has AT LEAST ONE valid point in it
 def calculate_color(n_img, arr):
     values = np.array([n_img[x, y] for x, y in arr])
@@ -137,11 +144,14 @@ def calculate_color(n_img, arr):
     KPCA_model = KernelPCA(n_components=1, kernel="poly")
 
     # Results of NMF operation
-    W = NMF_model.fit_transform(values) #size N x 2
-    H = NMF_model.components_ # size 2 x 3
+    W = NMF_model.fit_transform(values)  # size N x 2
+    H = NMF_model.components_  # size 2 x 3
 
-    # Specular = row with a higher sum (bool -> int casting)
-    specular = int(sum(H[1]) > sum(H[0]))
+    # Specular = row with a higher luminance (bool -> int casting)
+    print("a")
+    H0_lum, H1_lum = calculate_luminance(*H[0]), calculate_luminance(*H[1])
+    specular = H1_lum > H0_lum
+    print("b")
     diffuse = 1 - specular
 
     # Eliminates all impacts of specular component
@@ -151,7 +161,7 @@ def calculate_color(n_img, arr):
     X = np.rot90(W, axes=(1, 0))
 
     transformed = KPCA_model.fit_transform(X)
-    skin_color = np.multiply(transformed, H) #Array of size 2 x 3, row[specular] = 0, 0, 0
+    skin_color = np.multiply(transformed, H)  # Array of size 2 x 3, row[specular] = 0, 0, 0
 
     return [abs(i) for i in skin_color[diffuse]]
 
@@ -159,7 +169,7 @@ def calculate_color(n_img, arr):
 def process_image(n_img, n_name, display=False):
     imgRGB = cv2.cvtColor(n_img, cv2.COLOR_BGR2RGB)
     results = faceMesh.process(imgRGB)
-
+    print("here!")
     if results.multi_face_landmarks:
         patches = get_points(imgRGB, results.multi_face_landmarks)
         r_s, g_s, b_s = 0, 0, 0
@@ -172,15 +182,13 @@ def process_image(n_img, n_name, display=False):
                 b_s += patch_b
                 total += 1
 
-        print(r_s/total, g_s/total, b_s/total)
+        print(r_s / total, g_s / total, b_s / total)
         if display:
             display_points(n_img, patches, n_name)
 
     return imgRGB
 
 
-name = "ariana_grande"
-# img = cv2.imread(f"../images/{name}.jpg", flags=cv2.IMREAD_COLOR)
-img = cv2.imread("./kevin.jpg")
-print(img)
+name = "IMG_1812"
+img = cv2.imread(f"../images/{name}.jpg", flags=cv2.IMREAD_COLOR)
 process_image(img, name, DISPLAY_POINTS)
