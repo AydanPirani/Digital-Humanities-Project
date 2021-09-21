@@ -16,8 +16,8 @@ RCHEEK_POINTS = [261, 265, 372, 345, 352, 376, 433, 434, 432, 436, 426, 423, 266
 
 # USER INPUT VALUES, DEPENDENT ON TEST RUNS
 POINTS_THRESHOLD = 20  # Minimum points needed in a skin patch for it to "count"
-DISPLAY_POINTS = True  # If true, visualizes the points selected
-
+DISPLAY_POINTS = False  # If true, visualizes the points selected
+USE_STDEVS = False # If true, only includes points that are within 2 RGB stdevs of all selected points
 
 # Given an image and points to take measurements from, return "valid" points in the image
 def get_points(n_img, landmarks):
@@ -61,6 +61,9 @@ def get_points(n_img, landmarks):
     if len(rcheek_pts) < POINTS_THRESHOLD:
         rcheek_pts = []
 
+    if not USE_STDEVS:
+        return [forehead_pts, lcheek_pts, rcheek_pts]
+
     # Return all the points that are within 2 standard deviations of RGB values
     means, stds = get_stats(n_img, [forehead_pts, lcheek_pts, rcheek_pts])
 
@@ -91,7 +94,6 @@ def clean_data(n_img, points, means, stds):
     if len(points) == 0:
         print("no elements in face, returning []")
         return points
-    print("pre-cleaning", len(points))
 
     r_mean, g_mean, b_mean = means
     r_std, g_std, b_std = stds
@@ -107,10 +109,10 @@ def clean_data(n_img, points, means, stds):
                 b_range[0] <= temp[2] <= b_range[1]):
             new_points.append((p0, p1))
 
-    print("post-cleaning", len(new_points))
     return new_points
 
 
+# Given an array of points, draw the points on the provided image and create a copy
 def display_points(n_img, points, n_name):
     s = set()
     for arr in points:
@@ -136,6 +138,11 @@ def calculate_luminance(r, g, b):
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
 
+# SREDS-sourced method for perceived brightness, assuming that a higher RGB leads to a brighter color
+def approximate_luminance(r, g, b):
+    return r + g + b
+
+
 # Calculate average color of a skin patch, ASSUMING that the array has AT LEAST ONE valid point in it
 def calculate_color(n_img, arr):
     values = np.array([n_img[x, y] for x, y in arr])
@@ -148,13 +155,12 @@ def calculate_color(n_img, arr):
     H = NMF_model.components_  # size 2 x 3
 
     # Specular = row with a higher luminance (bool -> int casting)
-    print("a")
     H0_lum, H1_lum = calculate_luminance(*H[0]), calculate_luminance(*H[1])
-    specular = H1_lum > H0_lum
-    print("b")
+    specular = int(H1_lum > H0_lum)
     diffuse = 1 - specular
 
     # Eliminates all impacts of specular component
+    specular_comp = np.copy(H[specular])
     H[specular] = [0, 0, 0]
 
     # Converts W, from N rows of length 2, to 2 rows of length N
@@ -163,32 +169,48 @@ def calculate_color(n_img, arr):
     transformed = KPCA_model.fit_transform(X)
     skin_color = np.multiply(transformed, H)  # Array of size 2 x 3, row[specular] = 0, 0, 0
 
-    return [abs(i) for i in skin_color[diffuse]]
+    diffuse_comp = [abs(i) for i in skin_color[diffuse]]
+
+    return diffuse_comp, specular_comp
 
 
+# Wrapper function to work on the image
 def process_image(n_img, n_name, display=False):
     imgRGB = cv2.cvtColor(n_img, cv2.COLOR_BGR2RGB)
     results = faceMesh.process(imgRGB)
-    print("here!")
     if results.multi_face_landmarks:
+        # Pull skin patches given the image (using Google MP)
         patches = get_points(imgRGB, results.multi_face_landmarks)
-        r_s, g_s, b_s = 0, 0, 0
-        total = 0
-        for p in patches:
-            if len(p) > 0:
-                patch_r, patch_g, patch_b = calculate_color(imgRGB, p)
-                r_s += patch_r
-                g_s += patch_g
-                b_s += patch_b
-                total += 1
+        diff_r, diff_g, diff_b = 0, 0, 0
+        spec_r, spec_g, spec_b = 0, 0, 0
+        lum_diff = 0
 
-        print(r_s / total, g_s / total, b_s / total)
+        # Calculate average color and luminance difference of each skin patch
+        for p in patches:
+            diff, spec = calculate_color(imgRGB, p)
+            d_r, d_g, d_b = diff
+            s_r, s_g, s_b = spec
+
+            diff_r += d_r
+            diff_g += d_g
+            diff_b += d_b
+
+            spec_r += s_r
+            spec_b += s_b
+            spec_g += s_g
+
+        spec_comp = np.array([spec_r, spec_g, spec_b]) / len(patches)
+        diff_comp = np.array([diff_r, diff_g, diff_b]) / len(patches)
+
+        print("specular component", spec_comp)
+        print("diffuse component", diff_comp)
+
         if display:
             display_points(n_img, patches, n_name)
 
     return imgRGB
 
 
-name = "IMG_1812"
+name = "morgan_freeman"
 img = cv2.imread(f"../images/{name}.jpg", flags=cv2.IMREAD_COLOR)
 process_image(img, name, DISPLAY_POINTS)
