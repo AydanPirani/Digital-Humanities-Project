@@ -54,7 +54,7 @@ def calculate_luminance(r, g, b):
 
 
 # SREDS-sourced method for perceived brightness, assuming that a higher RGB leads to a brighter color
-def approximate_luminance(r, g, b):
+def estimate_luminance(r, g, b):
     return r + g + b
 
 
@@ -99,6 +99,38 @@ class SkinDetector:
         self.NMF_model = NMF(n_components=2, init='nndsvda', random_state=0, max_iter=2000, tol=5e-3, l1_ratio=0.2)
         self.KPCA_model = KernelPCA(n_components=1, kernel="poly")
 
+    def generate_json(self, img_id, img_path):
+        data = {"threshold": 20,
+                "true": {"spec": {}, "diff": {}},
+                "false": {"spec": {}, "diff": {}}
+                }
+        vals = SkinDetector.process(self,img_id, img_path, {"use_stdevs": False})
+
+        spec, diff = vals["spec"], vals["diff"]
+
+        data["true"]["spec"]["r"], data["true"]["spec"]["g"], data["true"]["spec"]["b"] = spec
+        data["true"]["diff"]["r"], data["true"]["diff"]["g"], data["true"]["diff"]["b"] = diff
+
+        data["true"]["spec"]["act_lum"] = calculate_luminance(*spec)
+        data["true"]["spec"]["esp_lum"] = estimate_luminance(*spec)
+        data["true"]["diff"]["act_lum"] = calculate_luminance(*diff)
+        data["true"]["diff"]["esp_lum"] = estimate_luminance(*diff)
+
+
+        vals = SkinDetector.process(self, img_id, img_path, {"use_stdevs": True})
+
+        spec, diff = vals["spec"], vals["diff"]
+
+        data["false"]["spec"]["r"], data["false"]["spec"]["g"], data["false"]["spec"]["b"] = spec
+        data["false"]["diff"]["r"], data["false"]["diff"]["g"], data["false"]["diff"]["b"] = diff
+
+        data["false"]["spec"]["act_lum"] = calculate_luminance(*spec)
+        data["false"]["spec"]["esp_lum"] = estimate_luminance(*spec)
+        data["false"]["diff"]["act_lum"] = calculate_luminance(*diff)
+        data["false"]["diff"]["esp_lum"] = estimate_luminance(*diff)
+
+        return data
+
     def process(self, img_id, img_path, params={}):
         self.POINTS_THRESHOLD = 20 if "points_threshold" not in params else params["points_threshold"]
         self.DISPLAY_POINTS = False if "display_points" not in params else params["display_points"]
@@ -114,7 +146,6 @@ class SkinDetector:
             patches = self.get_points(imgRGB, results.multi_face_landmarks)
             diff_r, diff_g, diff_b = 0, 0, 0
             spec_r, spec_g, spec_b = 0, 0, 0
-            lum_diff = 0
 
             # Calculate average color and luminance difference of each skin patch
             for p in patches:
@@ -133,11 +164,17 @@ class SkinDetector:
             spec_comp = np.array([spec_r, spec_g, spec_b]) / len(patches)
             diff_comp = np.array([diff_r, diff_g, diff_b]) / len(patches)
 
+            for i in range(3):
+                spec_comp[i] = round(spec_comp[i], 2)
+                diff_comp[i] = round(diff_comp[i], 2)
+
             print("specular component", spec_comp)
             print("diffuse component", diff_comp)
 
             if self.DISPLAY_POINTS:
                 display_points(img, patches, img_id)
+
+            return {"spec": spec_comp, "diff": diff_comp}
 
 
     # Given an image and points to take measurements from, return "valid" points in the image

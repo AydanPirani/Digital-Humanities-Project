@@ -8,4 +8,5 @@ s = SkinDetector()
 
 from SkinDetector import SkinDetector
 s = SkinDetector()
-s.process("morgan_freeman", "../images/morgan_freeman.jpg")
+data = s.generate_json("morgan_freeman", "../images/morgan_freeman.jpg")
+print(data)
