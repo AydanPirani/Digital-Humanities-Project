@@ -171,6 +171,8 @@ def calculate_color(n_img, arr):
 
     diffuse_comp = [abs(i) for i in skin_color[diffuse]]
 
+
+    # TODO: Check if spec_comp works
     return diffuse_comp, specular_comp
 
 
