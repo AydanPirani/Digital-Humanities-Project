@@ -57,27 +57,6 @@ def calculate_luminance(r, g, b):
 def estimate_luminance(r, g, b):
     return r + g + b
 
-
-# Given an array of points, draw the points on the provided image and create a copy
-def display_points(n_img, points, n_name):
-    s = set()
-    for arr in points:
-        s.update(arr)
-
-    image = n_img.copy()
-    invert = n_img.copy()
-    i_h, i_w, i_c = n_img.shape
-    for i in range(i_h):
-        for j in range(i_w):
-            if (i, j) in s:
-                invert[i, j] = [0, 0, 0]
-            else:
-                image[i, j] = [0, 0, 0]
-
-    cv2.imwrite(f"../results/{n_name}_IMAGE.jpg", image)
-    cv2.imwrite(f"../results/{n_name}_INVERT.jpg", invert)
-
-
 class SkinDetector:
     # Landmarks for each point, obtained via https://github.com/google/mediapipe/issues/1615
     FOREHEAD_POINTS = [251, 284, 332, 297, 338, 10, 109, 67, 103, 54, 21, 162, 139, 70, 63, 105, 66, 107,
@@ -98,6 +77,8 @@ class SkinDetector:
 
         self.NMF_model = NMF(n_components=2, init='nndsvda', random_state=0, max_iter=2000, tol=5e-3, l1_ratio=0.2)
         self.KPCA_model = KernelPCA(n_components=1, kernel="poly")
+
+        self.diff = []
 
     def generate_json(self, img_id, img_path):
         data = {"threshold": 20,
@@ -163,6 +144,7 @@ class SkinDetector:
 
             spec_comp = np.array([spec_r, spec_g, spec_b]) / len(patches)
             diff_comp = np.array([diff_r, diff_g, diff_b]) / len(patches)
+            self.diff = diff_comp
 
             for i in range(3):
                 spec_comp[i] = round(spec_comp[i], 2)
@@ -172,7 +154,7 @@ class SkinDetector:
             print("diffuse component", diff_comp)
 
             if self.DISPLAY_POINTS:
-                display_points(img, patches, img_id)
+                self.display_points(img, patches, img_id)
 
             return {"spec": spec_comp, "diff": diff_comp}
 
@@ -230,8 +212,8 @@ class SkinDetector:
 
     # Calculate average color of a skin patch, ASSUMING that the array has AT LEAST ONE valid point in it
     def calculate_color(self, img, arr):
+        print("IN CALCULATE")
         values = np.array([img[x, y] for x, y in arr])
-
 
         # Results of NMF operation
         W = self.NMF_model.fit_transform(values)  # size N x 2
@@ -255,3 +237,30 @@ class SkinDetector:
         diffuse_comp = [abs(i) for i in skin_color[diffuse]]
 
         return diffuse_comp, specular_comp
+
+    def display_points(self, n_img, points, n_name):
+        print("IN DISPLAY")
+        # Given an array of points, draw the points on the provided image and create a copy
+        s = set()
+        for arr in points:
+            s.update(arr)
+
+        image = n_img.copy()
+        invert = n_img.copy()
+        diffuse = n_img.copy()
+        i_h, i_w, i_c = n_img.shape
+
+        for i in range(i_h):
+            for j in range(i_w):
+                if (i, j) in s:
+                    invert[i, j] = [0, 0, 0]
+                    diffuse[i, j] = self.diff.copy()
+                else:
+                    image[i, j] = [0, 0, 0]
+                    diffuse[i, j] = [0, 0, 0]
+
+        diffuse = cv2.cvtColor(diffuse, cv2.COLOR_BGR2RGB)
+
+        cv2.imwrite(f"../results/{n_name}_IMAGE.jpg", image)
+        cv2.imwrite(f"../results/{n_name}_INVERT.jpg", invert)
+        cv2.imwrite(f"../results/{n_name}_DIFFUSE.jpg", diffuse)
