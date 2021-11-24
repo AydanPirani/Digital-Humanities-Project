@@ -1,14 +1,8 @@
-from SkinDetector import SkinDetector
-import cv2
+from ImageProcessorFactory import ImageProcessorFactory
 
-# img = cv2.imread("../images/morgan_freeman.jpg")
-
-s = SkinDetector()
-
-from SkinDetector import SkinDetector
-s = SkinDetector()
-# s.process(img, "morgan_freeman")
-
-# data = s.generate_json("morgan_freeman", "../images/morgan_freeman.jpg")
-# print(data)
-s.process("testing",  "../images/ariana_grande.jpg", {"display_points":True})
+factory = ImageProcessorFactory()
+processor1 = factory.create_processor("ariana_grande", "../images/ariana_grande.jpg")
+# processor2 = factory.create_processor("beyonce", "../images/beyonce.jpg")
+processor1.process()
+print(processor1.get_diff())
+print(processor1.get_spec())
