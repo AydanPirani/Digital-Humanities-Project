@@ -12,12 +12,5 @@ RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86
     echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc && \
     echo "conda activate base" >> ~/.bashrc
 
-CMD [ "/bin/bash" ]
-
-COPY ./ ./
-RUN conda env create -f environment.yml
-
-RUN conda init
-
-SHELL [ "/bin/bash", "--login", "-c" ]
-RUN conda activate dhp && conda env list && cd python && python3 driver.py
+COPY environment.yml ./environment.yml
+RUN conda env create -f ./environment.yml
