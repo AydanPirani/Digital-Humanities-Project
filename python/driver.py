@@ -1,14 +1,18 @@
 from SkinDetector import SkinDetector
-import cv2
-
-# img = cv2.imread("../images/morgan_freeman.jpg")
+import json
 
 s = SkinDetector()
 
-from SkinDetector import SkinDetector
-s = SkinDetector()
-# s.process(img, "morgan_freeman")
 
+id = "morgan_freeman"
 # data = s.generate_json("morgan_freeman", "../images/morgan_freeman.jpg")
 # print(data)
-s.process("testing",  "../images/ariana_grande.jpg", {"display_points":True})
+
+s.generate_csv("morgan_freeman", "../images/morgan_freeman.jpg")
+
+# f = open(f"../results/data/{id}.json", "w")
+# json.dump(data, f)
+# f.close()
+
+
+# s.process("testing",  "../images/ariana_grande.jpg", {"display_points":True})

@@ -1,6 +1,7 @@
 import cv2
 import mediapipe as mp
 import numpy as np
+import pandas as pd
 from matplotlib.path import Path
 from sklearn.decomposition import NMF, KernelPCA
 
@@ -55,7 +56,7 @@ def calculate_luminance(r, g, b):
 
 # SREDS-sourced method for perceived brightness, assuming that a higher RGB leads to a brighter color
 def estimate_luminance(r, g, b):
-    return r + g + b
+    return (r + g + b) / 3
 
 class SkinDetector:
     # Landmarks for each point, obtained via https://github.com/google/mediapipe/issues/1615
@@ -112,7 +113,34 @@ class SkinDetector:
 
         return data
 
+
+    def generate_csv(self, img_id, img_path):
+        cols = ["id", "true/spec/r", "true/spec/g", "true/spec/b", "true/spec/act_lum",
+                "true/spec/esp_lum", "true/diff/r", "true/diff/g", "true/diff/b",
+                "true/diff/act_lum", "true/diff/esp_lum", "false/spec/r", "false/spec/g",
+                "false/spec/b", "false/spec/act_lum", "false/spec/esp_lum", "false/diff/r",
+                "false/diff/g", "false/diff/b", "false/diff/act_lum", "false/diff/esp_lum"]
+        data = [img_id]
+
+        for i in [True, False]:
+
+            vals = SkinDetector.process(self,img_id, img_path, {"use_stdevs": i})
+
+            spec, diff = vals["spec"], vals["diff"]
+
+            data.extend(spec)
+            data.append(calculate_luminance(*spec))
+            data.append(estimate_luminance(*spec))
+            data.extend(diff)
+            data.append(calculate_luminance(*diff))
+            data.append(estimate_luminance(*diff))
+
+        df = pd.DataFrame([data], columns=cols)
+        df.to_csv(f"../results/data/{img_id}.csv", index=False)
+        # return data
+
     def process(self, img_id, img_path, params={}):
+        print("in process")
         self.POINTS_THRESHOLD = 20 if "points_threshold" not in params else params["points_threshold"]
         self.DISPLAY_POINTS = False if "display_points" not in params else params["display_points"]
         self.USE_STDEVS = False if "use_stdevs" not in params else params["use_stdevs"]
@@ -261,6 +289,6 @@ class SkinDetector:
 
         diffuse = cv2.cvtColor(diffuse, cv2.COLOR_BGR2RGB)
 
-        cv2.imwrite(f"../results/{n_name}_IMAGE.jpg", image)
-        cv2.imwrite(f"../results/{n_name}_INVERT.jpg", invert)
-        cv2.imwrite(f"../results/{n_name}_DIFFUSE.jpg", diffuse)
+        cv2.imwrite(f"../results/imgs/{n_name}_IMAGE.jpg", image)
+        cv2.imwrite(f"../results/imgs/{n_name}_INVERT.jpg", invert)
+        cv2.imwrite(f"../results/imgs/{n_name}_DIFFUSE.jpg", diffuse)
