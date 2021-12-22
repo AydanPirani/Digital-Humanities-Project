@@ -136,8 +136,7 @@ class SkinDetector:
             data.append(estimate_luminance(*diff))
 
         df = pd.DataFrame([data], columns=cols)
-        df.to_csv(f"../results/data/{img_id}.csv", index=False)
-        # return data
+        df.to_csv(f"results/data/{img_id}.csv", index=False)
 
     def process(self, img_id, img_path, params={}):
         print("in process")
@@ -289,6 +288,6 @@ class SkinDetector:
 
         diffuse = cv2.cvtColor(diffuse, cv2.COLOR_BGR2RGB)
 
-        cv2.imwrite(f"../results/imgs/{n_name}_IMAGE.jpg", image)
-        cv2.imwrite(f"../results/imgs/{n_name}_INVERT.jpg", invert)
-        cv2.imwrite(f"../results/imgs/{n_name}_DIFFUSE.jpg", diffuse)
+        cv2.imwrite(f"./results/imgs/{n_name}_IMAGE.jpg", image)
+        cv2.imwrite(f"./results/imgs/{n_name}_INVERT.jpg", invert)
+        cv2.imwrite(f"./results/imgs/{n_name}_DIFFUSE.jpg", diffuse)
