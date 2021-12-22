@@ -7,6 +7,6 @@
 
 
 ALLFILES=$(wildcard images/*.jpg)
-dummy: $(ALLFILES:.jpg=.csv)
+exec: $(ALLFILES:.jpg=.csv)
 
 clean:
