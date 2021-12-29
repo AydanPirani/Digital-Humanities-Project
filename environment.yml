@@ -12,3 +12,4 @@ dependencies:
     - opencv-python==4.5.2.54
     - protobuf==3.17.3
     - six==1.16.0
+    - pandas

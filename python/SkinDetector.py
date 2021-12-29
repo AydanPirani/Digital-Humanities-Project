@@ -5,7 +5,6 @@ import pandas as pd
 from matplotlib.path import Path
 from sklearn.decomposition import NMF, KernelPCA
 
-
 # Return the mean and stdevs for RGB values within the image, for select points
 def get_stats(img, arr):
     r_vals, g_vals, b_vals = [], [], []
@@ -144,20 +143,23 @@ class SkinDetector:
         self.DISPLAY_POINTS = False if "display_points" not in params else params["display_points"]
         self.USE_STDEVS = False if "use_stdevs" not in params else params["use_stdevs"]
         self.faceMesh = self.mpFaceMesh.FaceMesh(max_num_faces=1 if "max_faces" not in params else params["max_faces"])
-
+        print("reading image")
         img = cv2.imread(img_path)
-
+        print("img read")
         imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         results = self.faceMesh.process(imgRGB)
+        print("generated facemesh")
         if results.multi_face_landmarks:
             # Pull skin patches given the image (using Google MP)
             patches = self.get_points(imgRGB, results.multi_face_landmarks)
+            print("patches created")
             diff_r, diff_g, diff_b = 0, 0, 0
             spec_r, spec_g, spec_b = 0, 0, 0
 
             # Calculate average color and luminance difference of each skin patch
             for p in patches:
                 diff, spec = self.calculate_color(imgRGB, p)
+                print("calculated color for patch")
                 d_r, d_g, d_b = diff
                 s_r, s_g, s_b = spec
 
@@ -172,7 +174,7 @@ class SkinDetector:
             spec_comp = np.array([spec_r, spec_g, spec_b]) / len(patches)
             diff_comp = np.array([diff_r, diff_g, diff_b]) / len(patches)
             self.diff = diff_comp
-
+            print("averaging spec and diff")
             for i in range(3):
                 spec_comp[i] = round(spec_comp[i], 2)
                 diff_comp[i] = round(diff_comp[i], 2)
@@ -200,12 +202,14 @@ class SkinDetector:
             lcheek_path = Path(lcheek_landmarks)
             rcheek_path = Path(rcheek_landmarks)
 
-            # Array of all pixels in the given area
+            # # Array of all pixels in the given area
             forehead_pts, rcheek_pts, lcheek_pts = [], [], []
 
+            print("paths created")
             # Iterate through all pixels in image, check if pixel in path, then add
-            for i in range(i_h):
-                for j in range(i_w):
+            for i in range(y_up, y_down + 1):
+                print(i)
+                for j in range(x_left, x_right + 1):
                     # Check if point in the given shape - if so, add to array
                     if forehead_path.contains_point((j, i)):
                         forehead_pts.append((i, j))
