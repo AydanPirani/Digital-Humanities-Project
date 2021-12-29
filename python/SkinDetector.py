@@ -59,10 +59,10 @@ def estimate_luminance(r, g, b):
 
 class SkinDetector:
     # Landmarks for each point, obtained via https://github.com/google/mediapipe/issues/1615
-    FOREHEAD_POINTS = [251, 284, 332, 297, 338, 10, 109, 67, 103, 54, 21, 162, 139, 70, 63, 105, 66, 107,
-                       9, 336, 296, 334, 293, 300, 383, 368, 389]
-    LCHEEK_POINTS = [31, 35, 143, 116, 123, 147, 213, 192, 214, 212, 216, 206, 203, 36, 101, 119, 229, 228]
-    RCHEEK_POINTS = [261, 265, 372, 345, 352, 376, 433, 434, 432, 436, 426, 423, 266, 330, 348, 449, 448]
+    FOREHEAD_POINTS = set([251, 284, 332, 297, 338, 10, 109, 67, 103, 54, 21, 162, 139, 70, 63, 105, 66, 107,
+                       9, 336, 296, 334, 293, 300, 383, 368, 389])
+    LCHEEK_POINTS = set([31, 35, 143, 116, 123, 147, 213, 192, 214, 212, 216, 206, 203, 36, 101, 119, 229, 228])
+    RCHEEK_POINTS = set([261, 265, 372, 345, 352, 376, 433, 434, 432, 436, 426, 423, 266, 330, 348, 449, 448])
 
     # Required values from MP library
     mpDraw = mp.solutions.drawing_utils
@@ -193,9 +193,27 @@ class SkinDetector:
         i_h, i_w, i_c = img.shape
         for faceLms in landmarks[:1]:
             # List of all the landmark coordinates from the generated face
-            forehead_landmarks = [(i_w * f.x, i_h * f.y) for f in [faceLms.landmark[i] for i in self.FOREHEAD_POINTS]]
-            lcheek_landmarks = [(i_w * f.x, i_h * f.y) for f in [faceLms.landmark[i] for i in self.LCHEEK_POINTS]]
-            rcheek_landmarks = [(i_w * f.x, i_h * f.y) for f in [faceLms.landmark[i] for i in self.RCHEEK_POINTS]]
+
+            x_left, x_right = float("inf"), -float("inf")
+            y_up, y_down = float("inf"), -float("inf")
+
+            forehead_landmarks, lcheek_landmarks, rcheek_landmarks = [], [], []
+
+            for i in range(0, len(faceLms.landmark)):
+                x, y = int(i_w * faceLms.landmark[i].x), int(i_h * faceLms.landmark[i].y)
+
+                if i in self.FOREHEAD_POINTS:
+                    forehead_landmarks.append((x, y))
+
+                if i in self.LCHEEK_POINTS:
+                    lcheek_landmarks.append((x, y))
+
+                if i in self.RCHEEK_POINTS:
+                    rcheek_landmarks.append((x, y))
+
+                if i in self.FOREHEAD_POINTS or i in self.LCHEEK_POINTS or i in self.RCHEEK_POINTS:
+                    x_left, x_right = min(x_left, x), max(x_right, x)
+                    y_up, y_down = min(y_up, y), max(y_down, y)
 
             # Generating MPL paths for each body part - used to iterate pixels
             forehead_path = Path(forehead_landmarks)
@@ -207,9 +225,9 @@ class SkinDetector:
 
             print("paths created")
             # Iterate through all pixels in image, check if pixel in path, then add
-            for i in range(y_up, y_down + 1):
+            for i in range(y_up, y_down + 1): # noqa
                 print(i)
-                for j in range(x_left, x_right + 1):
+                for j in range(x_left, x_right + 1): # noqa
                     # Check if point in the given shape - if so, add to array
                     if forehead_path.contains_point((j, i)):
                         forehead_pts.append((i, j))
