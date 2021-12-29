@@ -135,7 +135,7 @@ class SkinDetector:
             data.append(estimate_luminance(*diff))
 
         df = pd.DataFrame([data], columns=cols)
-        df.to_csv(f"results/data/{img_id}.csv", index=False)
+        df.to_csv(f"/opt/project/results/data/{img_id}.csv", index=False)
 
     def process(self, img_id, img_path, params={}):
         print("in process")
