@@ -79,6 +79,7 @@ class SkinDetector:
         self.KPCA_model = KernelPCA(n_components=1, kernel="poly")
 
         self.diff = []
+        self.patches = []
 
     def generate_json(self, img_id, img_path):
         data = {"threshold": 20,
@@ -190,59 +191,67 @@ class SkinDetector:
 
     # Given an image and points to take measurements from, return "valid" points in the image
     def get_points(self, img, landmarks):
-        i_h, i_w, i_c = img.shape
-        for faceLms in landmarks[:1]:
-            # List of all the landmark coordinates from the generated face
+        def get_patches():
+            print("calling get patches!")
+            i_h, i_w, i_c = img.shape
+            for faceLms in landmarks[:1]:
+                # List of all the landmark coordinates from the generated face
 
-            x_left, x_right = float("inf"), -float("inf")
-            y_up, y_down = float("inf"), -float("inf")
+                x_left, x_right = float("inf"), -float("inf")
+                y_up, y_down = float("inf"), -float("inf")
 
-            forehead_landmarks, lcheek_landmarks, rcheek_landmarks = [], [], []
+                forehead_landmarks, lcheek_landmarks, rcheek_landmarks = [], [], []
 
-            for i in range(0, len(faceLms.landmark)):
-                x, y = int(i_w * faceLms.landmark[i].x), int(i_h * faceLms.landmark[i].y)
+                for i in range(0, len(faceLms.landmark)):
+                    x, y = int(i_w * faceLms.landmark[i].x), int(i_h * faceLms.landmark[i].y)
 
-                if i in self.FOREHEAD_POINTS:
-                    forehead_landmarks.append((x, y))
+                    if i in self.FOREHEAD_POINTS:
+                        forehead_landmarks.append((x, y))
 
-                if i in self.LCHEEK_POINTS:
-                    lcheek_landmarks.append((x, y))
+                    if i in self.LCHEEK_POINTS:
+                        lcheek_landmarks.append((x, y))
 
-                if i in self.RCHEEK_POINTS:
-                    rcheek_landmarks.append((x, y))
+                    if i in self.RCHEEK_POINTS:
+                        rcheek_landmarks.append((x, y))
 
-                if i in self.FOREHEAD_POINTS or i in self.LCHEEK_POINTS or i in self.RCHEEK_POINTS:
-                    x_left, x_right = min(x_left, x), max(x_right, x)
-                    y_up, y_down = min(y_up, y), max(y_down, y)
+                    if i in self.FOREHEAD_POINTS or i in self.LCHEEK_POINTS or i in self.RCHEEK_POINTS:
+                        x_left, x_right = min(x_left, x), max(x_right, x)
+                        y_up, y_down = min(y_up, y), max(y_down, y)
 
-            # Generating MPL paths for each body part - used to iterate pixels
-            forehead_path = Path(forehead_landmarks)
-            lcheek_path = Path(lcheek_landmarks)
-            rcheek_path = Path(rcheek_landmarks)
+                # Generating MPL paths for each body part - used to iterate pixels
+                forehead_path = Path(forehead_landmarks)
+                lcheek_path = Path(lcheek_landmarks)
+                rcheek_path = Path(rcheek_landmarks)
 
-            # # Array of all pixels in the given area
-            forehead_pts, rcheek_pts, lcheek_pts = [], [], []
+                # # Array of all pixels in the given area
+                f_pts, r_pts, l_pts = [], [], []
 
-            print("paths created")
-            # Iterate through all pixels in image, check if pixel in path, then add
-            for i in range(y_up, y_down + 1): # noqa
-                print(i)
-                for j in range(x_left, x_right + 1): # noqa
-                    # Check if point in the given shape - if so, add to array
-                    if forehead_path.contains_point((j, i)):
-                        forehead_pts.append((i, j))
+                # Iterate through all pixels in image, check if pixel in path, then add
+                for i in range(y_up, y_down + 1):
+                    for j in range(x_left, x_right + 1):
+                        # Check if point in the given shape - if so, add to array
+                        if forehead_path.contains_point((j, i)):
+                            f_pts.append((i, j))
 
-                    # Same process as mentioned above, but with left cheek
-                    if lcheek_path.contains_point((j, i)):
-                        lcheek_pts.append((i, j))
+                        # Same process as mentioned above, but with left cheek
+                        if lcheek_path.contains_point((j, i)):
+                            l_pts.append((i, j))
 
-                    # Same process as mentioned above, but with right cheek
-                    if rcheek_path.contains_point((j, i)):
-                        rcheek_pts.append((i, j))
+                        # Same process as mentioned above, but with right cheek
+                        if rcheek_path.contains_point((j, i)):
+                            r_pts.append((i, j))
+
+            return f_pts, l_pts, r_pts
+
+        # Should only happen once - generate patches
+        if len(self.patches) == 0:
+            self.patches = list(get_patches())
+
+        forehead_pts, lcheek_pts, rcheek_pts = self.patches
 
         # Check if cheeks don't have enough points - if so, then array becomes nullified
         if len(forehead_pts) < self.POINTS_THRESHOLD:
-            lcheek_pts = []
+            forehead_pts = []
 
         if len(lcheek_pts) < self.POINTS_THRESHOLD:
             lcheek_pts = []
