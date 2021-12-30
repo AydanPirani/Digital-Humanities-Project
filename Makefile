@@ -2,11 +2,17 @@
 # 	echo Running Input:  $< output: $@
 # 	echo Filename: $(@F)
 # 	sleep 1
-	python3 python/driver.py $(@F)
+	python3 driver.py $(@F)
+
 # 	wc $< > $@
 
+test:
+	echo "test running!"
 
 ALLFILES=$(wildcard images/*.jpg)
+
+
 exec: $(ALLFILES:.jpg=.csv)
 
-clean:
+data: exec
+	python3 aggregator.py
