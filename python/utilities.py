@@ -116,4 +116,4 @@ def get_patches(img, landmarks):
                 elif rcheek_path.contains_point((j, i)):
                     r_pts.append((i, j))
 
-    return f_pts, l_pts, r_pts
+    return [f_pts, l_pts, r_pts]

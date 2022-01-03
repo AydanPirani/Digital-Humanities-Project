@@ -17,9 +17,8 @@ class SkinDetector:
         self.patches = []
 
     def get_data(self, img_id, img_path, params):
-
         data = {}
-        vals = SkinDetector.process(self, img_id, img_path, {"use_stdevs": False})
+        vals = SkinDetector.process(self, img_id, img_path, params)
 
         spec, diff = vals["spec"], vals["diff"]
 
@@ -107,7 +106,7 @@ class SkinDetector:
 
         # Should only happen once - generate patches
         if len(self.patches) == 0:
-            self.patches = list(utilities.get_patches(img, landmarks))
+            self.patches = utilities.get_patches(img, landmarks)
 
         forehead_pts, lcheek_pts, rcheek_pts = self.patches
 
@@ -129,6 +128,7 @@ class SkinDetector:
                     utilities.clean_data(img, rcheek_pts, means, stds)]
         else:
             return [forehead_pts, lcheek_pts, rcheek_pts]
+
 
     # Calculate average color of a skin patch, ASSUMING that the array has AT LEAST ONE valid point in it
     def calculate_color(self, img, arr):
