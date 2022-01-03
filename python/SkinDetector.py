@@ -48,6 +48,8 @@ class SkinDetector:
                 }
         return data
 
+
+    # TODO: convert JSON to CSV using get_data() method
     def generate_csv(self, img_id, img_path):
         cols = ["id", "true/spec/r", "true/spec/g", "true/spec/b", "true/spec/act_lum",
                 "true/spec/esp_lum", "true/diff/r", "true/diff/g", "true/diff/b",
@@ -79,22 +81,18 @@ class SkinDetector:
         self.faceMesh = self.mpFaceMesh.FaceMesh(max_num_faces=params.get("max_faces", 1))
 
         img = cv2.imread(img_path)
-        print("img read")
 
         imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         results = self.faceMesh.process(imgRGB)
-        print("generated facemesh")
         if results.multi_face_landmarks:
             # Pull skin patches given the image (using Google MP)
             patches = self.get_points(imgRGB, results.multi_face_landmarks)
-            print("patches created")
             diff_r, diff_g, diff_b = 0, 0, 0
             spec_r, spec_g, spec_b = 0, 0, 0
 
             # Calculate average color and luminance difference of each skin patch
             for p in patches:
                 diff, spec = self.calculate_color(imgRGB, p)
-                print("calculated color for patch")
                 d_r, d_g, d_b = diff
                 s_r, s_g, s_b = spec
 
@@ -109,13 +107,9 @@ class SkinDetector:
             spec_comp = np.array([spec_r, spec_g, spec_b]) / len(patches)
             diff_comp = np.array([diff_r, diff_g, diff_b]) / len(patches)
             self.diff = diff_comp
-            print("averaging spec and diff")
             for i in range(3):
                 spec_comp[i] = round(spec_comp[i], 2)
                 diff_comp[i] = round(diff_comp[i], 2)
-
-            print("specular component", spec_comp)
-            print("diffuse component", diff_comp)
 
             if self.DISPLAY_POINTS:
                 self.display_points(img, patches, img_id)
@@ -152,7 +146,6 @@ class SkinDetector:
 
     # Calculate average color of a skin patch, ASSUMING that the array has AT LEAST ONE valid point in it
     def calculate_color(self, img, arr):
-        print("IN CALCULATE")
         values = np.array([img[x, y] for x, y in arr])
 
         # Results of NMF operation
