@@ -24,36 +24,28 @@ class SkinDetector:
         self.diff = []
         self.patches = []
 
+    def get_data(self, img_id, img_path, params):
+
+        data = {}
+        vals = SkinDetector.process(self, img_id, img_path, {"use_stdevs": False})
+
+        spec, diff = vals["spec"], vals["diff"]
+
+        data["spec"]["r"], data["true"]["spec"]["g"], data["true"]["spec"]["b"] = spec
+        data["diff"]["r"], data["true"]["diff"]["g"], data["true"]["diff"]["b"] = diff
+
+        data["spec"]["act_lum"] = utilities.calculate_luminance(*spec)
+        data["spec"]["esp_lum"] = utilities.estimate_luminance(*spec)
+        data["diff"]["act_lum"] = utilities.calculate_luminance(*diff)
+        data["diff"]["esp_lum"] = utilities.estimate_luminance(*diff)
+
+        return data
+
     def generate_json(self, img_id, img_path):
         data = {"threshold": 20,
-                "true": {"spec": {}, "diff": {}},
-                "false": {"spec": {}, "diff": {}}
+                "true": self.get_data(img_id, img_path, {"use_stdevs": True}),
+                "false": self.get_data(img_id, img_path, {"use_stdevs": False})
                 }
-        vals = SkinDetector.process(self,img_id, img_path, {"use_stdevs": False})
-
-        spec, diff = vals["spec"], vals["diff"]
-
-        data["true"]["spec"]["r"], data["true"]["spec"]["g"], data["true"]["spec"]["b"] = spec
-        data["true"]["diff"]["r"], data["true"]["diff"]["g"], data["true"]["diff"]["b"] = diff
-
-        data["true"]["spec"]["act_lum"] = utilities.calculate_luminance(*spec)
-        data["true"]["spec"]["esp_lum"] = utilities.estimate_luminance(*spec)
-        data["true"]["diff"]["act_lum"] = utilities.calculate_luminance(*diff)
-        data["true"]["diff"]["esp_lum"] = utilities.estimate_luminance(*diff)
-
-
-        vals = SkinDetector.process(self, img_id, img_path, {"use_stdevs": True})
-
-        spec, diff = vals["spec"], vals["diff"]
-
-        data["false"]["spec"]["r"], data["false"]["spec"]["g"], data["false"]["spec"]["b"] = spec
-        data["false"]["diff"]["r"], data["false"]["diff"]["g"], data["false"]["diff"]["b"] = diff
-
-        data["false"]["spec"]["act_lum"] = utilities.calculate_luminance(*spec)
-        data["false"]["spec"]["esp_lum"] = utilities.estimate_luminance(*spec)
-        data["false"]["diff"]["act_lum"] = utilities.calculate_luminance(*diff)
-        data["false"]["diff"]["esp_lum"] = utilities.estimate_luminance(*diff)
-
         return data
 
     def generate_csv(self, img_id, img_path):
