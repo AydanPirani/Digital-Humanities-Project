@@ -7,6 +7,7 @@ FOREHEAD_POINTS = set([251, 284, 332, 297, 338, 10, 109, 67, 103, 54, 21, 162, 1
 LCHEEK_POINTS = set([31, 35, 143, 116, 123, 147, 213, 192, 214, 212, 216, 206, 203, 36, 101, 119, 229, 228])
 RCHEEK_POINTS = set([261, 265, 372, 345, 352, 376, 433, 434, 432, 436, 426, 423, 266, 330, 348, 449, 448])
 
+
 # Calculate the perceived brightness of a single pixel, given RGB values, sourced from link below (ITU BT.709)
 # https://stackoverflow.com/questions/596216/formula-to-determine-perceived-brightness-of-rgb-color#596243
 def calculate_luminance(r, g, b):
@@ -16,6 +17,7 @@ def calculate_luminance(r, g, b):
 # SREDS-sourced method for perceived brightness, assuming that a higher RGB leads to a brighter color
 def estimate_luminance(r, g, b):
     return (r + g + b) / 3
+
 
 # Return the mean and stdevs for RGB values within the image, for select points
 def get_stats(img, arr):
@@ -34,34 +36,38 @@ def get_stats(img, arr):
     return means, stds
 
 
+def get_range(pt, std):
+    return tuple(pt - 2 * std, pt + 2 * std)
+
+
+# Check if a point falls within a particular range
+def point_in_range(point, ranges):
+    for i in range(len(point)):
+        if point[i] < ranges[i][0] or point[i] > ranges[i][1]:
+            # point lies outside the range
+            return False
+    return True
+
+
 # Given an image, means/stdevs, and points, return only the points within 2 stds
 def clean_data(img, points, means, stds):
-    if len(points) == 0:
-        print("no elements in face, returning []")
-        return points
-
     r_mean, g_mean, b_mean = means
     r_std, g_std, b_std = stds
 
     # Ranges for which points should be included
-    r_range = (r_mean - 2 * r_std, r_mean + 2 * r_std)
-    g_range = (g_mean - 2 * g_std, g_mean + 2 * g_std)
-    b_range = (b_mean - 2 * b_std, b_mean + 2 * b_std)
+    r_range = get_range(r_mean, r_std)
+    g_range = get_range(g_mean, g_std)
+    b_range = get_range(b_mean, b_std)
 
-    new_points = []
-    for p0, p1 in points:
-        temp = img[p0, p1]
-        # Check if point is within given ranges -> if so, add to new set
-        if (r_range[0] <= temp[0] <= r_range[1]) and (g_range[0] <= temp[1] <= g_range[1]) and (
-                b_range[0] <= temp[2] <= b_range[1]):
-            new_points.append((p0, p1))
+    ranges = [r_range, g_range, b_range]
 
+    # list of all points that fall within valid rgb ranges
+    new_points = [(y, x) for y, x in points if point_in_range(img[y, x], ranges)]
     return new_points
 
 
 # inner function to get patches
 def get_patches(img, landmarks):
-    print("calling get patches!")
     i_h, i_w, i_c = img.shape
     for faceLms in landmarks[:1]:
         # List of all the landmark coordinates from the generated face
@@ -72,20 +78,24 @@ def get_patches(img, landmarks):
         forehead_landmarks, lcheek_landmarks, rcheek_landmarks = [], [], []
 
         for i in range(0, len(faceLms.landmark)):
-            x, y = int(i_w * faceLms.landmark[i].x), int(i_h * faceLms.landmark[i].y)
+            point = faceLms.landmark[i]
+            img_width, img_height =  i_w, i_h
+
+            x_coord = int(img_width * point.x)
+            y_coord = int(img_height * point.y)
 
             if i in FOREHEAD_POINTS:
-                forehead_landmarks.append((x, y))
+                forehead_landmarks.append((x_coord, y_coord))
 
             if i in LCHEEK_POINTS:
-                lcheek_landmarks.append((x, y))
+                lcheek_landmarks.append((x_coord, y_coord))
 
             if i in RCHEEK_POINTS:
-                rcheek_landmarks.append((x, y))
+                rcheek_landmarks.append((x_coord, y_coord))
 
             if i in FOREHEAD_POINTS or i in LCHEEK_POINTS or i in RCHEEK_POINTS:
-                x_left, x_right = min(x_left, x), max(x_right, x)
-                y_up, y_down = min(y_up, y), max(y_down, y)
+                x_left, x_right = min(x_left, x_coord), max(x_right, x_coord)
+                y_up, y_down = min(y_up, y_coord), max(y_down, y_coord)
 
         # Generating MPL paths for each body part - used to iterate pixels
         forehead_path = Path(forehead_landmarks)
@@ -101,13 +111,9 @@ def get_patches(img, landmarks):
                 # Check if point in the given shape - if so, add to array
                 if forehead_path.contains_point((j, i)):
                     f_pts.append((i, j))
-
-                # Same process as mentioned above, but with left cheek
-                if lcheek_path.contains_point((j, i)):
+                elif lcheek_path.contains_point((j, i)):
                     l_pts.append((i, j))
-
-                # Same process as mentioned above, but with right cheek
-                if rcheek_path.contains_point((j, i)):
+                elif rcheek_path.contains_point((j, i)):
                     r_pts.append((i, j))
 
     return f_pts, l_pts, r_pts
