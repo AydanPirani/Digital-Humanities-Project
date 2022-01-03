@@ -1,69 +1,12 @@
+import utilities
+
 import cv2
 import mediapipe as mp
 import numpy as np
 import pandas as pd
-from matplotlib.path import Path
 from sklearn.decomposition import NMF, KernelPCA
 
-# Return the mean and stdevs for RGB values within the image, for select points
-def get_stats(img, arr):
-    r_vals, g_vals, b_vals = [], [], []
-
-    for points in arr:
-        for p0, p1 in points:
-            temp = img[p0, p1]
-            r_vals.append(temp[0])
-            g_vals.append(temp[1])
-            b_vals.append(temp[2])
-
-    means = (np.mean(r_vals), np.mean(g_vals), np.mean(b_vals))
-    stds = (np.std(r_vals), np.std(g_vals), np.std(b_vals))
-
-    return means, stds
-
-
-# Given an image, means/stdevs, and points, return only the points within 2 stds
-def clean_data(img, points, means, stds):
-    if len(points) == 0:
-        print("no elements in face, returning []")
-        return points
-
-    r_mean, g_mean, b_mean = means
-    r_std, g_std, b_std = stds
-
-    # Ranges for which points should be included
-    r_range = (r_mean - 2 * r_std, r_mean + 2 * r_std)
-    g_range = (g_mean - 2 * g_std, g_mean + 2 * g_std)
-    b_range = (b_mean - 2 * b_std, b_mean + 2 * b_std)
-
-    new_points = []
-    for p0, p1 in points:
-        temp = img[p0, p1]
-        # Check if point is within given ranges -> if so, add to new set
-        if (r_range[0] <= temp[0] <= r_range[1]) and (g_range[0] <= temp[1] <= g_range[1]) and (
-                b_range[0] <= temp[2] <= b_range[1]):
-            new_points.append((p0, p1))
-
-    return new_points
-
-
-# Calculate the perceived brightness of a single pixel, given RGB values, sourced from link below (ITU BT.709)
-# https://stackoverflow.com/questions/596216/formula-to-determine-perceived-brightness-of-rgb-color#596243
-def calculate_luminance(r, g, b):
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b
-
-
-# SREDS-sourced method for perceived brightness, assuming that a higher RGB leads to a brighter color
-def estimate_luminance(r, g, b):
-    return (r + g + b) / 3
-
 class SkinDetector:
-    # Landmarks for each point, obtained via https://github.com/google/mediapipe/issues/1615
-    FOREHEAD_POINTS = set([251, 284, 332, 297, 338, 10, 109, 67, 103, 54, 21, 162, 139, 70, 63, 105, 66, 107,
-                       9, 336, 296, 334, 293, 300, 383, 368, 389])
-    LCHEEK_POINTS = set([31, 35, 143, 116, 123, 147, 213, 192, 214, 212, 216, 206, 203, 36, 101, 119, 229, 228])
-    RCHEEK_POINTS = set([261, 265, 372, 345, 352, 376, 433, 434, 432, 436, 426, 423, 266, 330, 348, 449, 448])
-
     # Required values from MP library
     mpDraw = mp.solutions.drawing_utils
     mpFaceMesh = mp.solutions.face_mesh
@@ -93,10 +36,10 @@ class SkinDetector:
         data["true"]["spec"]["r"], data["true"]["spec"]["g"], data["true"]["spec"]["b"] = spec
         data["true"]["diff"]["r"], data["true"]["diff"]["g"], data["true"]["diff"]["b"] = diff
 
-        data["true"]["spec"]["act_lum"] = calculate_luminance(*spec)
-        data["true"]["spec"]["esp_lum"] = estimate_luminance(*spec)
-        data["true"]["diff"]["act_lum"] = calculate_luminance(*diff)
-        data["true"]["diff"]["esp_lum"] = estimate_luminance(*diff)
+        data["true"]["spec"]["act_lum"] = utilities.calculate_luminance(*spec)
+        data["true"]["spec"]["esp_lum"] = utilities.estimate_luminance(*spec)
+        data["true"]["diff"]["act_lum"] = utilities.calculate_luminance(*diff)
+        data["true"]["diff"]["esp_lum"] = utilities.estimate_luminance(*diff)
 
 
         vals = SkinDetector.process(self, img_id, img_path, {"use_stdevs": True})
@@ -106,13 +49,12 @@ class SkinDetector:
         data["false"]["spec"]["r"], data["false"]["spec"]["g"], data["false"]["spec"]["b"] = spec
         data["false"]["diff"]["r"], data["false"]["diff"]["g"], data["false"]["diff"]["b"] = diff
 
-        data["false"]["spec"]["act_lum"] = calculate_luminance(*spec)
-        data["false"]["spec"]["esp_lum"] = estimate_luminance(*spec)
-        data["false"]["diff"]["act_lum"] = calculate_luminance(*diff)
-        data["false"]["diff"]["esp_lum"] = estimate_luminance(*diff)
+        data["false"]["spec"]["act_lum"] = utilities.calculate_luminance(*spec)
+        data["false"]["spec"]["esp_lum"] = utilities.estimate_luminance(*spec)
+        data["false"]["diff"]["act_lum"] = utilities.calculate_luminance(*diff)
+        data["false"]["diff"]["esp_lum"] = utilities.estimate_luminance(*diff)
 
         return data
-
 
     def generate_csv(self, img_id, img_path):
         cols = ["id", "true/spec/r", "true/spec/g", "true/spec/b", "true/spec/act_lum",
@@ -124,29 +66,29 @@ class SkinDetector:
 
         for i in [True, False]:
 
-            vals = SkinDetector.process(self,img_id, img_path, {"use_stdevs": i})
+            vals = SkinDetector.process(self, img_id, img_path, {"use_stdevs": i})
 
             spec, diff = vals["spec"], vals["diff"]
 
             data.extend(spec)
-            data.append(calculate_luminance(*spec))
-            data.append(estimate_luminance(*spec))
+            data.append(utilities.calculate_luminance(*spec))
+            data.append(utilities.estimate_luminance(*spec))
             data.extend(diff)
-            data.append(calculate_luminance(*diff))
-            data.append(estimate_luminance(*diff))
+            data.append(utilities.calculate_luminance(*diff))
+            data.append(utilities.estimate_luminance(*diff))
 
         df = pd.DataFrame([data], columns=cols)
         df.to_csv(f"/opt/project/results/data/{img_id}.csv", index=False)
 
     def process(self, img_id, img_path, params={}):
-        print("in process")
-        self.POINTS_THRESHOLD = 20 if "points_threshold" not in params else params["points_threshold"]
-        self.DISPLAY_POINTS = False if "display_points" not in params else params["display_points"]
-        self.USE_STDEVS = False if "use_stdevs" not in params else params["use_stdevs"]
-        self.faceMesh = self.mpFaceMesh.FaceMesh(max_num_faces=1 if "max_faces" not in params else params["max_faces"])
-        print("reading image")
+        self.POINTS_THRESHOLD = params.get("points_threshold", 20)
+        self.DISPLAY_POINTS = params.get("display_points", False)
+        self.USE_STDEVS = params.get("use_stdevs", False)
+        self.faceMesh = self.mpFaceMesh.FaceMesh(max_num_faces=params.get("max_faces", 1))
+
         img = cv2.imread(img_path)
         print("img read")
+
         imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         results = self.faceMesh.process(imgRGB)
         print("generated facemesh")
@@ -188,64 +130,12 @@ class SkinDetector:
 
             return {"spec": spec_comp, "diff": diff_comp}
 
-
     # Given an image and points to take measurements from, return "valid" points in the image
     def get_points(self, img, landmarks):
-        def get_patches():
-            print("calling get patches!")
-            i_h, i_w, i_c = img.shape
-            for faceLms in landmarks[:1]:
-                # List of all the landmark coordinates from the generated face
-
-                x_left, x_right = float("inf"), -float("inf")
-                y_up, y_down = float("inf"), -float("inf")
-
-                forehead_landmarks, lcheek_landmarks, rcheek_landmarks = [], [], []
-
-                for i in range(0, len(faceLms.landmark)):
-                    x, y = int(i_w * faceLms.landmark[i].x), int(i_h * faceLms.landmark[i].y)
-
-                    if i in self.FOREHEAD_POINTS:
-                        forehead_landmarks.append((x, y))
-
-                    if i in self.LCHEEK_POINTS:
-                        lcheek_landmarks.append((x, y))
-
-                    if i in self.RCHEEK_POINTS:
-                        rcheek_landmarks.append((x, y))
-
-                    if i in self.FOREHEAD_POINTS or i in self.LCHEEK_POINTS or i in self.RCHEEK_POINTS:
-                        x_left, x_right = min(x_left, x), max(x_right, x)
-                        y_up, y_down = min(y_up, y), max(y_down, y)
-
-                # Generating MPL paths for each body part - used to iterate pixels
-                forehead_path = Path(forehead_landmarks)
-                lcheek_path = Path(lcheek_landmarks)
-                rcheek_path = Path(rcheek_landmarks)
-
-                # # Array of all pixels in the given area
-                f_pts, r_pts, l_pts = [], [], []
-
-                # Iterate through all pixels in image, check if pixel in path, then add
-                for i in range(y_up, y_down + 1):
-                    for j in range(x_left, x_right + 1):
-                        # Check if point in the given shape - if so, add to array
-                        if forehead_path.contains_point((j, i)):
-                            f_pts.append((i, j))
-
-                        # Same process as mentioned above, but with left cheek
-                        if lcheek_path.contains_point((j, i)):
-                            l_pts.append((i, j))
-
-                        # Same process as mentioned above, but with right cheek
-                        if rcheek_path.contains_point((j, i)):
-                            r_pts.append((i, j))
-
-            return f_pts, l_pts, r_pts
 
         # Should only happen once - generate patches
         if len(self.patches) == 0:
-            self.patches = list(get_patches())
+            self.patches = list(utilities.get_patches(img, landmarks))
 
         forehead_pts, lcheek_pts, rcheek_pts = self.patches
 
@@ -261,10 +151,10 @@ class SkinDetector:
 
         if self.USE_STDEVS:
             # Return all the points that are within 2 standard deviations of RGB values
-            means, stds = get_stats(img, [forehead_pts, lcheek_pts, rcheek_pts])
-            return [clean_data(img, forehead_pts, means, stds),
-                    clean_data(img, lcheek_pts, means, stds),
-                    clean_data(img, rcheek_pts, means, stds)]
+            means, stds = utilities.get_stats(img, [forehead_pts, lcheek_pts, rcheek_pts])
+            return [utilities.clean_data(img, forehead_pts, means, stds),
+                    utilities.clean_data(img, lcheek_pts, means, stds),
+                    utilities.clean_data(img, rcheek_pts, means, stds)]
         else:
             return [forehead_pts, lcheek_pts, rcheek_pts]
 
@@ -278,7 +168,7 @@ class SkinDetector:
         H = self.NMF_model.components_  # size 2 x 3
 
         # Specular = row with a higher luminance (bool -> int casting)
-        H0_lum, H1_lum = calculate_luminance(*H[0]), calculate_luminance(*H[1])
+        H0_lum, H1_lum = utilities.calculate_luminance(*H[0]), utilities.calculate_luminance(*H[1])
         specular = int(H1_lum > H0_lum)
         diffuse = 1 - specular
 
@@ -297,7 +187,6 @@ class SkinDetector:
         return diffuse_comp, specular_comp
 
     def display_points(self, n_img, points, n_name):
-        print("IN DISPLAY")
         # Given an array of points, draw the points on the provided image and create a copy
         s = set()
         for arr in points:
