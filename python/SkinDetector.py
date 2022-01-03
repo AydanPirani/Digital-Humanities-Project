@@ -1,25 +1,17 @@
-import utilities
-
 import cv2
 import mediapipe as mp
 import numpy as np
 import pandas as pd
 from sklearn.decomposition import NMF, KernelPCA
 
+import python.utilities as utilities
+
+
 class SkinDetector:
     # Required values from MP library
     mpDraw = mp.solutions.drawing_utils
-    mpFaceMesh = mp.solutions.face_mesh
 
     def __init__(self):
-        self.USE_STDEVS = None
-        self.DISPLAY_POINTS = None
-        self.POINTS_THRESHOLD = None
-
-        self.faceMesh = None
-
-        self.NMF_model = NMF(n_components=2, init='nndsvda', random_state=0, max_iter=2000, tol=5e-3, l1_ratio=0.2)
-        self.KPCA_model = KernelPCA(n_components=1, kernel="poly")
 
         self.diff = []
         self.patches = []
@@ -72,52 +64,46 @@ class SkinDetector:
             data.append(utilities.estimate_luminance(*diff))
 
         df = pd.DataFrame([data], columns=cols)
-        df.to_csv(f"/opt/project/results/data/{img_id}.csv", index=False)
+        df.to_csv(f"./results/data/{img_id}.csv", index=False)
 
     def process(self, img_id, img_path, params={}):
-        self.POINTS_THRESHOLD = params.get("points_threshold", 20)
-        self.DISPLAY_POINTS = params.get("display_points", False)
-        self.USE_STDEVS = params.get("use_stdevs", False)
-        self.faceMesh = self.mpFaceMesh.FaceMesh(max_num_faces=params.get("max_faces", 1))
+        points_threshold = params.get("points_threshold", 20)
+        display_points = params.get("display_points", False)
+        use_stdevs = params.get("use_stdevs", False)
+        max_faces = params.get("max_faces", 1)
 
-        img = cv2.imread(img_path)
+        faceMesh = mp.solutions.face_mesh.FaceMesh(max_num_faces=max_faces)
 
-        imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        results = self.faceMesh.process(imgRGB)
+        img = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB)
+
+        results = faceMesh.process(img)
+
         if results.multi_face_landmarks:
             # Pull skin patches given the image (using Google MP)
-            patches = self.get_points(imgRGB, results.multi_face_landmarks)
-            diff_r, diff_g, diff_b = 0, 0, 0
-            spec_r, spec_g, spec_b = 0, 0, 0
+            patches = self.get_points(img, results.multi_face_landmarks, points_threshold, use_stdevs)
+
+            diff_comp = np.array([0, 0, 0], dtype=float)
+            spec_comp = np.array([0, 0, 0], dtype=float)
 
             # Calculate average color and luminance difference of each skin patch
             for p in patches:
-                diff, spec = self.calculate_color(imgRGB, p)
-                d_r, d_g, d_b = diff
-                s_r, s_g, s_b = spec
+                patch_diff, patch_spec = self.calculate_color(img, p)
 
-                diff_r += d_r
-                diff_g += d_g
-                diff_b += d_b
+                diff_comp += patch_diff
+                spec_comp += patch_spec
 
-                spec_r += s_r
-                spec_b += s_b
-                spec_g += s_g
+            diff_comp = np.around(diff_comp / len(patches), 3)
+            spec_comp = np.around(spec_comp / len(patches), 3)
 
-            spec_comp = np.array([spec_r, spec_g, spec_b]) / len(patches)
-            diff_comp = np.array([diff_r, diff_g, diff_b]) / len(patches)
             self.diff = diff_comp
-            for i in range(3):
-                spec_comp[i] = round(spec_comp[i], 2)
-                diff_comp[i] = round(diff_comp[i], 2)
 
-            if self.DISPLAY_POINTS:
+            if display_points:
                 self.display_points(img, patches, img_id)
 
             return {"spec": spec_comp, "diff": diff_comp}
 
     # Given an image and points to take measurements from, return "valid" points in the image
-    def get_points(self, img, landmarks):
+    def get_points(self, img, landmarks, threshold, use_stdevs):
 
         # Should only happen once - generate patches
         if len(self.patches) == 0:
@@ -126,16 +112,16 @@ class SkinDetector:
         forehead_pts, lcheek_pts, rcheek_pts = self.patches
 
         # Check if cheeks don't have enough points - if so, then array becomes nullified
-        if len(forehead_pts) < self.POINTS_THRESHOLD:
+        if len(forehead_pts) < threshold:
             forehead_pts = []
 
-        if len(lcheek_pts) < self.POINTS_THRESHOLD:
+        if len(lcheek_pts) < threshold:
             lcheek_pts = []
 
-        if len(rcheek_pts) < self.POINTS_THRESHOLD:
+        if len(rcheek_pts) < threshold:
             rcheek_pts = []
 
-        if self.USE_STDEVS:
+        if use_stdevs:
             # Return all the points that are within 2 standard deviations of RGB values
             means, stds = utilities.get_stats(img, [forehead_pts, lcheek_pts, rcheek_pts])
             return [utilities.clean_data(img, forehead_pts, means, stds),
@@ -148,9 +134,11 @@ class SkinDetector:
     def calculate_color(self, img, arr):
         values = np.array([img[x, y] for x, y in arr])
 
+        NMF_model = NMF(n_components=2, init='nndsvda', random_state=0, max_iter=2000, tol=5e-3, l1_ratio=0.2)
+
         # Results of NMF operation
-        W = self.NMF_model.fit_transform(values)  # size N x 2
-        H = self.NMF_model.components_  # size 2 x 3
+        W = NMF_model.fit_transform(values)  # size N x 2
+        H = NMF_model.components_  # size 2 x 3
 
         # Specular = row with a higher luminance (bool -> int casting)
         H0_lum, H1_lum = utilities.calculate_luminance(*H[0]), utilities.calculate_luminance(*H[1])
@@ -164,7 +152,9 @@ class SkinDetector:
         # Converts W, from N rows of length 2, to 2 rows of length N
         X = np.rot90(W, axes=(1, 0))
 
-        transformed = self.KPCA_model.fit_transform(X)
+        KPCA_model = KernelPCA(n_components=1, kernel="poly")
+
+        transformed = KPCA_model.fit_transform(X)
         skin_color = np.multiply(transformed, H)  # Array of size 2 x 3, row[specular] = 0, 0, 0
 
         diffuse_comp = [abs(i) for i in skin_color[diffuse]]

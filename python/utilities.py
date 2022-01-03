@@ -37,7 +37,7 @@ def get_stats(img, arr):
 
 
 def get_range(pt, std):
-    return tuple(pt - 2 * std, pt + 2 * std)
+    return tuple([pt - 2 * std, pt + 2 * std])
 
 
 # Check if a point falls within a particular range
