@@ -49,8 +49,32 @@ def point_in_range(point, ranges):
     return True
 
 
+# return a cleaned array of 3 patches, each patch represents points within the patch
+def clean_patches(img, patches, use_stdevs, threshold):
+    forehead_pts, lcheek_pts, rcheek_pts = patches
+
+    # Check if cheeks don't have enough points - if so, then array becomes nullified
+    if len(forehead_pts) < threshold:
+        forehead_pts = np.empty()
+
+    if len(lcheek_pts) < threshold:
+        lcheek_pts = np.empty()
+
+    if len(rcheek_pts) < threshold:
+        rcheek_pts = np.empty()
+
+    if use_stdevs:
+        # Return all the points that are within 2 standard deviations of RGB values
+        means, stds = get_stats(img, [forehead_pts, lcheek_pts, rcheek_pts])
+        return np.array([filter_by_stdevs(img, forehead_pts, means, stds),
+                         filter_by_stdevs(img, lcheek_pts, means, stds),
+                         filter_by_stdevs(img, rcheek_pts, means, stds)])
+    else:
+        return np.array([forehead_pts, lcheek_pts, rcheek_pts])
+
+
 # Given an image, means/stdevs, and points, return only the points within 2 stds
-def clean_data(img, points, means, stds):
+def filter_by_stdevs(img, points, means, stds):
     r_mean, g_mean, b_mean = means
     r_std, g_std, b_std = stds
 
@@ -62,7 +86,7 @@ def clean_data(img, points, means, stds):
     ranges = [r_range, g_range, b_range]
 
     # list of all points that fall within valid rgb ranges
-    new_points = [(y, x) for y, x in points if point_in_range(img[y, x], ranges)]
+    new_points = np.array([(y, x) for y, x in points if point_in_range(img[y, x], ranges)])
     return new_points
 
 

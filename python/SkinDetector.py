@@ -8,22 +8,20 @@ import python.utilities as utilities
 
 
 class SkinDetector:
-    # Required values from MP library
-    mpDraw = mp.solutions.drawing_utils
-
     def __init__(self):
-
         self.diff = []
         self.patches = []
 
     def get_data(self, img_id, img_path, params):
-        data = {}
+        data = {"spec": {},
+                "diff": {}
+                }
         vals = SkinDetector.process(self, img_id, img_path, params)
 
         spec, diff = vals["spec"], vals["diff"]
 
-        data["spec"]["r"], data["true"]["spec"]["g"], data["true"]["spec"]["b"] = spec
-        data["diff"]["r"], data["true"]["diff"]["g"], data["true"]["diff"]["b"] = diff
+        data["spec"]["r"], data["spec"]["g"], data["spec"]["b"] = spec
+        data["diff"]["r"], data["diff"]["g"], data["diff"]["b"] = diff
 
         data["spec"]["act_lum"] = utilities.calculate_luminance(*spec)
         data["spec"]["esp_lum"] = utilities.estimate_luminance(*spec)
@@ -42,28 +40,13 @@ class SkinDetector:
 
     # TODO: convert JSON to CSV using get_data() method
     def generate_csv(self, img_id, img_path):
-        cols = ["id", "true/spec/r", "true/spec/g", "true/spec/b", "true/spec/act_lum",
-                "true/spec/esp_lum", "true/diff/r", "true/diff/g", "true/diff/b",
-                "true/diff/act_lum", "true/diff/esp_lum", "false/spec/r", "false/spec/g",
-                "false/spec/b", "false/spec/act_lum", "false/spec/esp_lum", "false/diff/r",
-                "false/diff/g", "false/diff/b", "false/diff/act_lum", "false/diff/esp_lum"]
-        data = [img_id]
-
-        for i in [True, False]:
-
-            vals = SkinDetector.process(self, img_id, img_path, {"use_stdevs": i})
-
-            spec, diff = vals["spec"], vals["diff"]
-
-            data.extend(spec)
-            data.append(utilities.calculate_luminance(*spec))
-            data.append(utilities.estimate_luminance(*spec))
-            data.extend(diff)
-            data.append(utilities.calculate_luminance(*diff))
-            data.append(utilities.estimate_luminance(*diff))
-
-        df = pd.DataFrame([data], columns=cols)
+        data = {"id": img_id,
+                "true": self.get_data(img_id, img_path, {"use_stdevs": True}),
+                "false": self.get_data(img_id, img_path, {"use_stdevs": False})
+                }
+        df = pd.json_normalize(data)
         df.to_csv(f"./results/data/{img_id}.csv", index=False)
+
 
     def process(self, img_id, img_path, params={}):
         points_threshold = params.get("points_threshold", 20)
@@ -103,31 +86,12 @@ class SkinDetector:
 
     # Given an image and points to take measurements from, return "valid" points in the image
     def get_points(self, img, landmarks, threshold, use_stdevs):
-
         # Should only happen once - generate patches
         if len(self.patches) == 0:
             self.patches = utilities.get_patches(img, landmarks)
 
-        forehead_pts, lcheek_pts, rcheek_pts = self.patches
-
-        # Check if cheeks don't have enough points - if so, then array becomes nullified
-        if len(forehead_pts) < threshold:
-            forehead_pts = []
-
-        if len(lcheek_pts) < threshold:
-            lcheek_pts = []
-
-        if len(rcheek_pts) < threshold:
-            rcheek_pts = []
-
-        if use_stdevs:
-            # Return all the points that are within 2 standard deviations of RGB values
-            means, stds = utilities.get_stats(img, [forehead_pts, lcheek_pts, rcheek_pts])
-            return [utilities.clean_data(img, forehead_pts, means, stds),
-                    utilities.clean_data(img, lcheek_pts, means, stds),
-                    utilities.clean_data(img, rcheek_pts, means, stds)]
-        else:
-            return [forehead_pts, lcheek_pts, rcheek_pts]
+        forehead_pts, lcheek_pts, rcheek_pts = utilities.clean_patches(img, self.patches, use_stdevs, threshold)
+        return np.array([forehead_pts, lcheek_pts, rcheek_pts])
 
 
     # Calculate average color of a skin patch, ASSUMING that the array has AT LEAST ONE valid point in it
@@ -161,26 +125,24 @@ class SkinDetector:
 
         return diffuse_comp, specular_comp
 
+
+    # Given an array of points, draw the points on the provided image and create a copy
     def display_points(self, n_img, points, n_name):
-        # Given an array of points, draw the points on the provided image and create a copy
-        s = set()
-        for arr in points:
-            s.update(arr)
+        shape = n_img.shape
 
         image = n_img.copy()
-        invert = n_img.copy()
-        diffuse = n_img.copy()
-        i_h, i_w, i_c = n_img.shape
+        invert = np.zeros(shape, dtype=np.uint8)
+        diffuse = np.zeros(shape, dtype=np.uint8)
 
-        for i in range(i_h):
-            for j in range(i_w):
-                if (i, j) in s:
-                    invert[i, j] = [0, 0, 0]
-                    diffuse[i, j] = self.diff.copy()
-                else:
-                    image[i, j] = [0, 0, 0]
-                    diffuse[i, j] = [0, 0, 0]
+        for patch in points:
+            for y, x in patch:
+                temp = image[y, x].copy()
+                image[y, x] = [0, 0, 0]
+                invert[y, x] = temp
+                diffuse[y, x] = self.diff
 
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        invert = cv2.cvtColor(invert, cv2.COLOR_BGR2RGB)
         diffuse = cv2.cvtColor(diffuse, cv2.COLOR_BGR2RGB)
 
         cv2.imwrite(f"./results/imgs/{n_name}_IMAGE.jpg", image)
