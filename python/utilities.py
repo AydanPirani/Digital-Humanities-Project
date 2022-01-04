@@ -1,5 +1,6 @@
 import numpy as np
 from matplotlib.path import Path
+import cv2
 
 # Landmarks for each point, obtained via https://github.com/google/mediapipe/issues/1615
 FOREHEAD_POINTS = set([251, 284, 332, 297, 338, 10, 109, 67, 103, 54, 21, 162, 139, 70, 63, 105, 66, 107,
@@ -103,7 +104,7 @@ def get_patches(img, landmarks):
 
         for i in range(0, len(faceLms.landmark)):
             point = faceLms.landmark[i]
-            img_width, img_height =  i_w, i_h
+            img_width, img_height = i_w, i_h
 
             x_coord = int(img_width * point.x)
             y_coord = int(img_height * point.y)
@@ -141,3 +142,27 @@ def get_patches(img, landmarks):
                     r_pts.append((i, j))
 
     return [f_pts, l_pts, r_pts]
+
+
+# Given an array of points, draw the points on the provided image and create a copy
+def display_points(img, points, name, diff):
+    shape = img.shape
+
+    image = img.copy()
+    invert = np.zeros(shape, dtype=np.uint8)
+    diffuse = np.zeros(shape, dtype=np.uint8)
+
+    for patch in points:
+        for y, x in patch:
+            temp = image[y, x].copy()
+            image[y, x] = [0, 0, 0]
+            invert[y, x] = temp
+            diffuse[y, x] = diff
+
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    invert = cv2.cvtColor(invert, cv2.COLOR_BGR2RGB)
+    diffuse = cv2.cvtColor(diffuse, cv2.COLOR_BGR2RGB)
+
+    cv2.imwrite(f"./results/imgs/{name}_IMAGE.jpg", image)
+    cv2.imwrite(f"./results/imgs/{name}_INVERT.jpg", invert)
+    cv2.imwrite(f"./results/imgs/{name}_DIFFUSE.jpg", diffuse)

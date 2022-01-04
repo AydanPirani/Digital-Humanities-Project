@@ -80,7 +80,7 @@ class SkinDetector:
             self.diff = diff_comp
 
             if display_points:
-                self.display_points(img, patches, img_id)
+                utilities.display_points(img, patches, img_id, self.diff)
 
             return {"spec": spec_comp, "diff": diff_comp}
 
@@ -126,25 +126,3 @@ class SkinDetector:
         return diffuse_comp, specular_comp
 
 
-    # Given an array of points, draw the points on the provided image and create a copy
-    def display_points(self, n_img, points, n_name):
-        shape = n_img.shape
-
-        image = n_img.copy()
-        invert = np.zeros(shape, dtype=np.uint8)
-        diffuse = np.zeros(shape, dtype=np.uint8)
-
-        for patch in points:
-            for y, x in patch:
-                temp = image[y, x].copy()
-                image[y, x] = [0, 0, 0]
-                invert[y, x] = temp
-                diffuse[y, x] = self.diff
-
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        invert = cv2.cvtColor(invert, cv2.COLOR_BGR2RGB)
-        diffuse = cv2.cvtColor(diffuse, cv2.COLOR_BGR2RGB)
-
-        cv2.imwrite(f"./results/imgs/{n_name}_IMAGE.jpg", image)
-        cv2.imwrite(f"./results/imgs/{n_name}_INVERT.jpg", invert)
-        cv2.imwrite(f"./results/imgs/{n_name}_DIFFUSE.jpg", diffuse)
