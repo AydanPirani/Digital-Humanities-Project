@@ -2,283 +2,110 @@ import cv2
 import mediapipe as mp
 import numpy as np
 import pandas as pd
-from matplotlib.path import Path
 from sklearn.decomposition import NMF, KernelPCA
 
-# Return the mean and stdevs for RGB values within the image, for select points
-def get_stats(img, arr):
-    r_vals, g_vals, b_vals = [], [], []
+import python.utilities as utilities
 
-    for points in arr:
-        for p0, p1 in points:
-            temp = img[p0, p1]
-            r_vals.append(temp[0])
-            g_vals.append(temp[1])
-            b_vals.append(temp[2])
-
-    means = (np.mean(r_vals), np.mean(g_vals), np.mean(b_vals))
-    stds = (np.std(r_vals), np.std(g_vals), np.std(b_vals))
-
-    return means, stds
-
-
-# Given an image, means/stdevs, and points, return only the points within 2 stds
-def clean_data(img, points, means, stds):
-    if len(points) == 0:
-        print("no elements in face, returning []")
-        return points
-
-    r_mean, g_mean, b_mean = means
-    r_std, g_std, b_std = stds
-
-    # Ranges for which points should be included
-    r_range = (r_mean - 2 * r_std, r_mean + 2 * r_std)
-    g_range = (g_mean - 2 * g_std, g_mean + 2 * g_std)
-    b_range = (b_mean - 2 * b_std, b_mean + 2 * b_std)
-
-    new_points = []
-    for p0, p1 in points:
-        temp = img[p0, p1]
-        # Check if point is within given ranges -> if so, add to new set
-        if (r_range[0] <= temp[0] <= r_range[1]) and (g_range[0] <= temp[1] <= g_range[1]) and (
-                b_range[0] <= temp[2] <= b_range[1]):
-            new_points.append((p0, p1))
-
-    return new_points
-
-
-# Calculate the perceived brightness of a single pixel, given RGB values, sourced from link below (ITU BT.709)
-# https://stackoverflow.com/questions/596216/formula-to-determine-perceived-brightness-of-rgb-color#596243
-def calculate_luminance(r, g, b):
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b
-
-
-# SREDS-sourced method for perceived brightness, assuming that a higher RGB leads to a brighter color
-def estimate_luminance(r, g, b):
-    return (r + g + b) / 3
 
 class SkinDetector:
-    # Landmarks for each point, obtained via https://github.com/google/mediapipe/issues/1615
-    FOREHEAD_POINTS = set([251, 284, 332, 297, 338, 10, 109, 67, 103, 54, 21, 162, 139, 70, 63, 105, 66, 107,
-                       9, 336, 296, 334, 293, 300, 383, 368, 389])
-    LCHEEK_POINTS = set([31, 35, 143, 116, 123, 147, 213, 192, 214, 212, 216, 206, 203, 36, 101, 119, 229, 228])
-    RCHEEK_POINTS = set([261, 265, 372, 345, 352, 376, 433, 434, 432, 436, 426, 423, 266, 330, 348, 449, 448])
-
-    # Required values from MP library
-    mpDraw = mp.solutions.drawing_utils
-    mpFaceMesh = mp.solutions.face_mesh
-
     def __init__(self):
-        self.USE_STDEVS = None
-        self.DISPLAY_POINTS = None
-        self.POINTS_THRESHOLD = None
-
-        self.faceMesh = None
-
-        self.NMF_model = NMF(n_components=2, init='nndsvda', random_state=0, max_iter=2000, tol=5e-3, l1_ratio=0.2)
-        self.KPCA_model = KernelPCA(n_components=1, kernel="poly")
-
         self.diff = []
         self.patches = []
 
-    def generate_json(self, img_id, img_path):
-        data = {"threshold": 20,
-                "true": {"spec": {}, "diff": {}},
-                "false": {"spec": {}, "diff": {}}
+    def get_data(self, img_id, img_path, params):
+        data = {"spec": {},
+                "diff": {}
                 }
-        vals = SkinDetector.process(self,img_id, img_path, {"use_stdevs": False})
+        vals = SkinDetector.process(self, img_id, img_path, params)
 
         spec, diff = vals["spec"], vals["diff"]
 
-        data["true"]["spec"]["r"], data["true"]["spec"]["g"], data["true"]["spec"]["b"] = spec
-        data["true"]["diff"]["r"], data["true"]["diff"]["g"], data["true"]["diff"]["b"] = diff
+        data["spec"]["r"], data["spec"]["g"], data["spec"]["b"] = spec
+        data["diff"]["r"], data["diff"]["g"], data["diff"]["b"] = diff
 
-        data["true"]["spec"]["act_lum"] = calculate_luminance(*spec)
-        data["true"]["spec"]["esp_lum"] = estimate_luminance(*spec)
-        data["true"]["diff"]["act_lum"] = calculate_luminance(*diff)
-        data["true"]["diff"]["esp_lum"] = estimate_luminance(*diff)
-
-
-        vals = SkinDetector.process(self, img_id, img_path, {"use_stdevs": True})
-
-        spec, diff = vals["spec"], vals["diff"]
-
-        data["false"]["spec"]["r"], data["false"]["spec"]["g"], data["false"]["spec"]["b"] = spec
-        data["false"]["diff"]["r"], data["false"]["diff"]["g"], data["false"]["diff"]["b"] = diff
-
-        data["false"]["spec"]["act_lum"] = calculate_luminance(*spec)
-        data["false"]["spec"]["esp_lum"] = estimate_luminance(*spec)
-        data["false"]["diff"]["act_lum"] = calculate_luminance(*diff)
-        data["false"]["diff"]["esp_lum"] = estimate_luminance(*diff)
+        data["spec"]["act_lum"] = utilities.calculate_luminance(*spec)
+        data["spec"]["est_lum"] = utilities.estimate_luminance(*spec)
+        data["diff"]["act_lum"] = utilities.calculate_luminance(*diff)
+        data["diff"]["est_lum"] = utilities.estimate_luminance(*diff)
 
         return data
 
+    def generate_json(self, img_id, img_path):
+        data = {"threshold": 20,
+                "true": self.get_data(img_id, img_path, {"use_stdevs": True}),
+                "false": self.get_data(img_id, img_path, {"use_stdevs": False})
+                }
+        return data
 
+
+    # TODO: convert JSON to CSV using get_data() method
     def generate_csv(self, img_id, img_path):
-        cols = ["id", "true/spec/r", "true/spec/g", "true/spec/b", "true/spec/act_lum",
-                "true/spec/esp_lum", "true/diff/r", "true/diff/g", "true/diff/b",
-                "true/diff/act_lum", "true/diff/esp_lum", "false/spec/r", "false/spec/g",
-                "false/spec/b", "false/spec/act_lum", "false/spec/esp_lum", "false/diff/r",
-                "false/diff/g", "false/diff/b", "false/diff/act_lum", "false/diff/esp_lum"]
-        data = [img_id]
+        data = {"id": img_id,
+                "true": self.get_data(img_id, img_path, {"use_stdevs": True}),
+                "false": self.get_data(img_id, img_path, {"use_stdevs": False})
+                }
+        df = pd.json_normalize(data)
+        df.to_csv(f"./results/data/{img_id}.csv", index=False)
 
-        for i in [True, False]:
-
-            vals = SkinDetector.process(self,img_id, img_path, {"use_stdevs": i})
-
-            spec, diff = vals["spec"], vals["diff"]
-
-            data.extend(spec)
-            data.append(calculate_luminance(*spec))
-            data.append(estimate_luminance(*spec))
-            data.extend(diff)
-            data.append(calculate_luminance(*diff))
-            data.append(estimate_luminance(*diff))
-
-        df = pd.DataFrame([data], columns=cols)
-        df.to_csv(f"/opt/project/results/data/{img_id}.csv", index=False)
 
     def process(self, img_id, img_path, params={}):
-        print("in process")
-        self.POINTS_THRESHOLD = 20 if "points_threshold" not in params else params["points_threshold"]
-        self.DISPLAY_POINTS = False if "display_points" not in params else params["display_points"]
-        self.USE_STDEVS = False if "use_stdevs" not in params else params["use_stdevs"]
-        self.faceMesh = self.mpFaceMesh.FaceMesh(max_num_faces=1 if "max_faces" not in params else params["max_faces"])
-        print("reading image")
-        img = cv2.imread(img_path)
-        print("img read")
-        imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        results = self.faceMesh.process(imgRGB)
-        print("generated facemesh")
+        points_threshold = params.get("points_threshold", 20)
+        display_points = params.get("display_points", False)
+        use_stdevs = params.get("use_stdevs", False)
+        max_faces = params.get("max_faces", 1)
+
+        faceMesh = mp.solutions.face_mesh.FaceMesh(max_num_faces=max_faces)
+
+        img = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB)
+
+        results = faceMesh.process(img)
+
         if results.multi_face_landmarks:
             # Pull skin patches given the image (using Google MP)
-            patches = self.get_points(imgRGB, results.multi_face_landmarks)
-            print("patches created")
-            diff_r, diff_g, diff_b = 0, 0, 0
-            spec_r, spec_g, spec_b = 0, 0, 0
+            patches = self.get_points(img, results.multi_face_landmarks, points_threshold, use_stdevs)
+
+            diff_comp = np.array([0, 0, 0], dtype=float)
+            spec_comp = np.array([0, 0, 0], dtype=float)
 
             # Calculate average color and luminance difference of each skin patch
             for p in patches:
-                diff, spec = self.calculate_color(imgRGB, p)
-                print("calculated color for patch")
-                d_r, d_g, d_b = diff
-                s_r, s_g, s_b = spec
+                patch_diff, patch_spec = self.calculate_color(img, p)
 
-                diff_r += d_r
-                diff_g += d_g
-                diff_b += d_b
+                diff_comp += patch_diff
+                spec_comp += patch_spec
 
-                spec_r += s_r
-                spec_b += s_b
-                spec_g += s_g
+            diff_comp = np.around(diff_comp / len(patches), 3)
+            spec_comp = np.around(spec_comp / len(patches), 3)
 
-            spec_comp = np.array([spec_r, spec_g, spec_b]) / len(patches)
-            diff_comp = np.array([diff_r, diff_g, diff_b]) / len(patches)
             self.diff = diff_comp
-            print("averaging spec and diff")
-            for i in range(3):
-                spec_comp[i] = round(spec_comp[i], 2)
-                diff_comp[i] = round(diff_comp[i], 2)
 
-            print("specular component", spec_comp)
-            print("diffuse component", diff_comp)
-
-            if self.DISPLAY_POINTS:
-                self.display_points(img, patches, img_id)
+            if display_points:
+                utilities.display_points(img, patches, img_id, self.diff)
 
             return {"spec": spec_comp, "diff": diff_comp}
 
-
     # Given an image and points to take measurements from, return "valid" points in the image
-    def get_points(self, img, landmarks):
-        def get_patches():
-            print("calling get patches!")
-            i_h, i_w, i_c = img.shape
-            for faceLms in landmarks[:1]:
-                # List of all the landmark coordinates from the generated face
-
-                x_left, x_right = float("inf"), -float("inf")
-                y_up, y_down = float("inf"), -float("inf")
-
-                forehead_landmarks, lcheek_landmarks, rcheek_landmarks = [], [], []
-
-                for i in range(0, len(faceLms.landmark)):
-                    x, y = int(i_w * faceLms.landmark[i].x), int(i_h * faceLms.landmark[i].y)
-
-                    if i in self.FOREHEAD_POINTS:
-                        forehead_landmarks.append((x, y))
-
-                    if i in self.LCHEEK_POINTS:
-                        lcheek_landmarks.append((x, y))
-
-                    if i in self.RCHEEK_POINTS:
-                        rcheek_landmarks.append((x, y))
-
-                    if i in self.FOREHEAD_POINTS or i in self.LCHEEK_POINTS or i in self.RCHEEK_POINTS:
-                        x_left, x_right = min(x_left, x), max(x_right, x)
-                        y_up, y_down = min(y_up, y), max(y_down, y)
-
-                # Generating MPL paths for each body part - used to iterate pixels
-                forehead_path = Path(forehead_landmarks)
-                lcheek_path = Path(lcheek_landmarks)
-                rcheek_path = Path(rcheek_landmarks)
-
-                # # Array of all pixels in the given area
-                f_pts, r_pts, l_pts = [], [], []
-
-                # Iterate through all pixels in image, check if pixel in path, then add
-                for i in range(y_up, y_down + 1):
-                    for j in range(x_left, x_right + 1):
-                        # Check if point in the given shape - if so, add to array
-                        if forehead_path.contains_point((j, i)):
-                            f_pts.append((i, j))
-
-                        # Same process as mentioned above, but with left cheek
-                        if lcheek_path.contains_point((j, i)):
-                            l_pts.append((i, j))
-
-                        # Same process as mentioned above, but with right cheek
-                        if rcheek_path.contains_point((j, i)):
-                            r_pts.append((i, j))
-
-            return f_pts, l_pts, r_pts
-
+    def get_points(self, img, landmarks, threshold, use_stdevs):
         # Should only happen once - generate patches
         if len(self.patches) == 0:
-            self.patches = list(get_patches())
+            self.patches = utilities.get_patches(img, landmarks)
 
-        forehead_pts, lcheek_pts, rcheek_pts = self.patches
+        forehead_pts, lcheek_pts, rcheek_pts = utilities.clean_patches(img, self.patches, use_stdevs, threshold)
+        return np.array([forehead_pts, lcheek_pts, rcheek_pts])
 
-        # Check if cheeks don't have enough points - if so, then array becomes nullified
-        if len(forehead_pts) < self.POINTS_THRESHOLD:
-            forehead_pts = []
-
-        if len(lcheek_pts) < self.POINTS_THRESHOLD:
-            lcheek_pts = []
-
-        if len(rcheek_pts) < self.POINTS_THRESHOLD:
-            rcheek_pts = []
-
-        if self.USE_STDEVS:
-            # Return all the points that are within 2 standard deviations of RGB values
-            means, stds = get_stats(img, [forehead_pts, lcheek_pts, rcheek_pts])
-            return [clean_data(img, forehead_pts, means, stds),
-                    clean_data(img, lcheek_pts, means, stds),
-                    clean_data(img, rcheek_pts, means, stds)]
-        else:
-            return [forehead_pts, lcheek_pts, rcheek_pts]
 
     # Calculate average color of a skin patch, ASSUMING that the array has AT LEAST ONE valid point in it
     def calculate_color(self, img, arr):
-        print("IN CALCULATE")
         values = np.array([img[x, y] for x, y in arr])
 
+        NMF_model = NMF(n_components=2, init='nndsvda', random_state=0, max_iter=2000, tol=5e-3, l1_ratio=0.2)
+
         # Results of NMF operation
-        W = self.NMF_model.fit_transform(values)  # size N x 2
-        H = self.NMF_model.components_  # size 2 x 3
+        W = NMF_model.fit_transform(values)  # size N x 2
+        H = NMF_model.components_  # size 2 x 3
 
         # Specular = row with a higher luminance (bool -> int casting)
-        H0_lum, H1_lum = calculate_luminance(*H[0]), calculate_luminance(*H[1])
+        H0_lum, H1_lum = utilities.calculate_luminance(*H[0]), utilities.calculate_luminance(*H[1])
         specular = int(H1_lum > H0_lum)
         diffuse = 1 - specular
 
@@ -289,36 +116,13 @@ class SkinDetector:
         # Converts W, from N rows of length 2, to 2 rows of length N
         X = np.rot90(W, axes=(1, 0))
 
-        transformed = self.KPCA_model.fit_transform(X)
+        KPCA_model = KernelPCA(n_components=1, kernel="poly")
+
+        transformed = KPCA_model.fit_transform(X)
         skin_color = np.multiply(transformed, H)  # Array of size 2 x 3, row[specular] = 0, 0, 0
 
         diffuse_comp = [abs(i) for i in skin_color[diffuse]]
 
         return diffuse_comp, specular_comp
 
-    def display_points(self, n_img, points, n_name):
-        print("IN DISPLAY")
-        # Given an array of points, draw the points on the provided image and create a copy
-        s = set()
-        for arr in points:
-            s.update(arr)
 
-        image = n_img.copy()
-        invert = n_img.copy()
-        diffuse = n_img.copy()
-        i_h, i_w, i_c = n_img.shape
-
-        for i in range(i_h):
-            for j in range(i_w):
-                if (i, j) in s:
-                    invert[i, j] = [0, 0, 0]
-                    diffuse[i, j] = self.diff.copy()
-                else:
-                    image[i, j] = [0, 0, 0]
-                    diffuse[i, j] = [0, 0, 0]
-
-        diffuse = cv2.cvtColor(diffuse, cv2.COLOR_BGR2RGB)
-
-        cv2.imwrite(f"./results/imgs/{n_name}_IMAGE.jpg", image)
-        cv2.imwrite(f"./results/imgs/{n_name}_INVERT.jpg", invert)
-        cv2.imwrite(f"./results/imgs/{n_name}_DIFFUSE.jpg", diffuse)
