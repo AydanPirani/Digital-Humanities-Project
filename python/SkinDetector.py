@@ -24,9 +24,9 @@ class SkinDetector:
         data["diff"]["r"], data["diff"]["g"], data["diff"]["b"] = diff
 
         data["spec"]["act_lum"] = utilities.calculate_luminance(*spec)
-        data["spec"]["esp_lum"] = utilities.estimate_luminance(*spec)
+        data["spec"]["est_lum"] = utilities.estimate_luminance(*spec)
         data["diff"]["act_lum"] = utilities.calculate_luminance(*diff)
-        data["diff"]["esp_lum"] = utilities.estimate_luminance(*diff)
+        data["diff"]["est_lum"] = utilities.estimate_luminance(*diff)
 
         return data
 
