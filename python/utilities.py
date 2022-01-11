@@ -3,10 +3,10 @@ from matplotlib.path import Path
 import cv2
 
 # Landmarks for each point, obtained via https://github.com/google/mediapipe/issues/1615
-FOREHEAD_POINTS = set([251, 284, 332, 297, 338, 10, 109, 67, 103, 54, 21, 162, 139, 70, 63, 105, 66, 107,
-                       9, 336, 296, 334, 293, 300, 383, 368, 389])
-LCHEEK_POINTS = set([31, 35, 143, 116, 123, 147, 213, 192, 214, 212, 216, 206, 203, 36, 101, 119, 229, 228])
-RCHEEK_POINTS = set([261, 265, 372, 345, 352, 376, 433, 434, 432, 436, 426, 423, 266, 330, 348, 449, 448])
+FOREHEAD_POINTS = [251, 284, 332, 297, 338, 10, 109, 67, 103, 54, 21, 162, 139, 70, 63, 105, 66, 107,
+                       9, 336, 296, 334, 293, 300, 383, 368, 389]
+LCHEEK_POINTS = [31, 35, 143, 116, 123, 147, 213, 192, 214, 212, 216, 206, 203, 36, 101, 119, 229, 228]
+RCHEEK_POINTS = [261, 265, 372, 345, 352, 376, 433, 434, 432, 436, 426, 423, 266, 330, 348, 449, 448]
 
 
 # Calculate the perceived brightness of a single pixel, given RGB values, sourced from link below (ITU BT.709)
@@ -102,6 +102,7 @@ def get_patches(img, landmarks):
 
         forehead_landmarks, lcheek_landmarks, rcheek_landmarks = [], [], []
 
+        # TODO: Fix traversal of landmarks (ties into display points funky geometry)
         for i in range(0, len(faceLms.landmark)):
             point = faceLms.landmark[i]
             img_width, img_height = i_w, i_h

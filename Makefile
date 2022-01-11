@@ -1,18 +1,17 @@
-%.csv : %.jpg
-# 	echo Running Input:  $< output: $@
-# 	echo Filename: $(@F)
-# 	sleep 1
-	python3 driver.py $(@F)
+results/data/%.csv : images/%.jpg
+	python3 driver.py ${@F}
 
-# 	wc $< > $@
+ALLFILES=$(subst images/, results/data/, $(wildcard images/*.jpg))
 
-test:
-	echo "test running!"
-
-ALLFILES=$(wildcard images/*.jpg)
-
-
-exec: $(ALLFILES:.jpg=.csv)
-
-data: exec
+exec: ${ALLFILES:.jpg=.csv}
 	python3 aggregator.py
+
+clean:
+	rm -rf ./results/data/*.csv
+	rm ./results/results.csv
+
+.DEFAULT_GOAL := exec
+
+
+# Current potential downside: while result generation is optimized only for changed/new images, aggregation
+# will combine ALL .csv irrespective of repeated information
