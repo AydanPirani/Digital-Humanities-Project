@@ -12,12 +12,12 @@ RCHEEK_POINTS = [261, 265, 372, 345, 352, 376, 433, 434, 432, 436, 426, 423, 266
 # Calculate the perceived brightness of a single pixel, given RGB values, sourced from link below (ITU BT.709)
 # https://stackoverflow.com/questions/596216/formula-to-determine-perceived-brightness-of-rgb-color#596243
 def calculate_luminance(r, g, b):
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+    return round(0.2126 * r + 0.7152 * g + 0.0722 * b, 2)
 
 
 # SREDS-sourced method for perceived brightness, assuming that a higher RGB leads to a brighter color
 def estimate_luminance(r, g, b):
-    return (r + g + b) / 3
+    return round((r + g + b) / 3, 2)
 
 
 # Return the mean and stdevs for RGB values within the image, for select points
@@ -71,7 +71,7 @@ def clean_patches(img, patches, use_stdevs, threshold):
                          filter_by_stdevs(img, lcheek_pts, means, stds),
                          filter_by_stdevs(img, rcheek_pts, means, stds)])
     else:
-        return np.array([forehead_pts, lcheek_pts, rcheek_pts])
+        return np.array([forehead_pts, lcheek_pts, rcheek_pts], dtype=object)
 
 
 # Given an image, means/stdevs, and points, return only the points within 2 stds
