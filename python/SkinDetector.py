@@ -38,7 +38,6 @@ class SkinDetector:
         return data
 
 
-    # TODO: convert JSON to CSV using get_data() method
     def generate_csv(self, img_id, img_path):
         data = {"id": img_id,
                 "true": self.get_data(img_id, img_path, {"use_stdevs": True}),
@@ -76,7 +75,7 @@ class SkinDetector:
 
             diff_comp = np.around(diff_comp / len(patches), 3)
             spec_comp = np.around(spec_comp / len(patches), 3)
-
+            print("78:", diff_comp, spec_comp)
             self.diff = diff_comp
 
             if display_points:
@@ -96,7 +95,7 @@ class SkinDetector:
 
     # Calculate average color of a skin patch, ASSUMING that the array has AT LEAST ONE valid point in it
     def calculate_color(self, img, arr):
-        values = np.array([img[x, y] for x, y in arr])
+        values = np.array([img[y, x] for y, x in arr])
 
         NMF_model = NMF(n_components=2, init='nndsvda', random_state=0, max_iter=2000, tol=5e-3, l1_ratio=0.2)
 
@@ -106,12 +105,18 @@ class SkinDetector:
 
         # Specular = row with a higher luminance (bool -> int casting)
         H0_lum, H1_lum = utilities.calculate_luminance(*H[0]), utilities.calculate_luminance(*H[1])
-        specular = int(H1_lum > H0_lum)
-        diffuse = 1 - specular
+
+        specular, diffuse = -1, -1
+        if H0_lum > H1_lum:
+            specular, diffuse = 0, 1
+        else:
+            specular, diffuse = 1, 0
 
         # Eliminates all impacts of specular component
         specular_comp = np.copy(H[specular])
         H[specular] = [0, 0, 0]
+
+        # print(H)
 
         # Converts W, from N rows of length 2, to 2 rows of length N
         X = np.rot90(W, axes=(1, 0))
@@ -120,9 +125,10 @@ class SkinDetector:
 
         transformed = KPCA_model.fit_transform(X)
         skin_color = np.multiply(transformed, H)  # Array of size 2 x 3, row[specular] = 0, 0, 0
-
+        print(skin_color)
         diffuse_comp = [abs(i) for i in skin_color[diffuse]]
 
+        print("124:", diffuse_comp, specular_comp)
         return diffuse_comp, specular_comp
 
 

@@ -150,12 +150,15 @@ def display_points(img, points, name, diff):
     invert = np.zeros(shape, dtype=np.uint8)
     diffuse = np.zeros(shape, dtype=np.uint8)
 
+    for i in range(len(diff)):
+        diff[i] = min(255, int(diff[i]))
+
     for patch in points:
         for y, x in patch:
             temp = image[y, x].copy()
             image[y, x] = [0, 0, 0]
             invert[y, x] = temp
-            diffuse[y, x] = diff
+            diffuse[y, x] = diff.copy()
 
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     invert = cv2.cvtColor(invert, cv2.COLOR_BGR2RGB)
