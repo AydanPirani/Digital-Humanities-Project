@@ -8,6 +8,10 @@ FOREHEAD_POINTS = [251, 284, 332, 297, 338, 10, 109, 67, 103, 54, 21, 162, 139, 
 LCHEEK_POINTS = [31, 35, 143, 116, 123, 147, 213, 192, 214, 212, 216, 206, 203, 36, 101, 119, 229, 228]
 RCHEEK_POINTS = [261, 265, 372, 345, 352, 376, 433, 434, 432, 436, 426, 423, 266, 330, 348, 449, 448]
 
+# bounding variables for pixels to iterate over
+x_left, x_right = float("inf"), -float("inf")
+y_up, y_down = float("inf"), -float("inf")
+
 
 # Calculate the perceived brightness of a single pixel, given RGB values, sourced from link below (ITU BT.709)
 # https://stackoverflow.com/questions/596216/formula-to-determine-perceived-brightness-of-rgb-color#596243
@@ -90,40 +94,32 @@ def filter_by_stdevs(img, points, means, stds):
     new_points = np.array([(y, x) for y, x in points if point_in_range(img[y, x], ranges)])
     return new_points
 
+def generate_patches(img, landmarks, pointList):
+    global x_left, x_right, y_down, y_up
+    i_h, i_w, i_c = img.shape
+    patch = []
+    for i in pointList:
+        point = landmarks[i]
+        x_coord = int(i_w * point.x)
+        y_coord = int(i_h * point.y)
+
+        patch.append((x_coord, y_coord))
+        x_left, x_right = min(x_left, x_coord), max(x_right, x_coord)
+        y_up, y_down = min(y_up, y_coord), max(y_down, y_coord)
+    return patch
+
 
 # inner function to get patches
 def get_patches(img, landmarks):
-    i_h, i_w, i_c = img.shape
     for faceLms in landmarks[:1]:
         # List of all the landmark coordinates from the generated face
 
-        x_left, x_right = float("inf"), -float("inf")
-        y_up, y_down = float("inf"), -float("inf")
+        # Setting up patches for each body part
+        forehead_landmarks = generate_patches(img, faceLms.landmark, FOREHEAD_POINTS)
+        lcheek_landmarks = generate_patches(img, faceLms.landmark, LCHEEK_POINTS)
+        rcheek_landmarks = generate_patches(img, faceLms.landmark, RCHEEK_POINTS)
 
-        forehead_landmarks, lcheek_landmarks, rcheek_landmarks = [], [], []
-
-        # TODO: Fix traversal of landmarks (ties into display points funky geometry)
-        for i in range(0, len(faceLms.landmark)):
-            point = faceLms.landmark[i]
-            img_width, img_height = i_w, i_h
-
-            x_coord = int(img_width * point.x)
-            y_coord = int(img_height * point.y)
-
-            if i in FOREHEAD_POINTS:
-                forehead_landmarks.append((x_coord, y_coord))
-
-            if i in LCHEEK_POINTS:
-                lcheek_landmarks.append((x_coord, y_coord))
-
-            if i in RCHEEK_POINTS:
-                rcheek_landmarks.append((x_coord, y_coord))
-
-            if i in FOREHEAD_POINTS or i in LCHEEK_POINTS or i in RCHEEK_POINTS:
-                x_left, x_right = min(x_left, x_coord), max(x_right, x_coord)
-                y_up, y_down = min(y_up, y_coord), max(y_down, y_coord)
-
-        # Generating MPL paths for each body part - used to iterate pixels
+        # Generating MPL paths for each patch - used to iterate pixels
         forehead_path = Path(forehead_landmarks)
         lcheek_path = Path(lcheek_landmarks)
         rcheek_path = Path(rcheek_landmarks)
@@ -132,21 +128,22 @@ def get_patches(img, landmarks):
         f_pts, r_pts, l_pts = [], [], []
 
         # Iterate through all pixels in image, check if pixel in path, then add
-        for i in range(y_up, y_down + 1):
-            for j in range(x_left, x_right + 1):
+        for y in range(y_up, y_down + 1):
+            for x in range(x_left, x_right + 1):
                 # Check if point in the given shape - if so, add to array
-                if forehead_path.contains_point((j, i)):
-                    f_pts.append((i, j))
-                elif lcheek_path.contains_point((j, i)):
-                    l_pts.append((i, j))
-                elif rcheek_path.contains_point((j, i)):
-                    r_pts.append((i, j))
+                if forehead_path.contains_point((x, y)):
+                    f_pts.append((y, x))
+                elif lcheek_path.contains_point((x, y)):
+                    l_pts.append((y, x))
+                elif rcheek_path.contains_point((x, y)):
+                    r_pts.append((y, x))
 
     return [f_pts, l_pts, r_pts]
 
 
 # Given an array of points, draw the points on the provided image and create a copy
 def display_points(img, points, name, diff):
+    print(diff)
     shape = img.shape
 
     image = img.copy()
