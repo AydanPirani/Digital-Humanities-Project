@@ -1,6 +1,6 @@
 import pandas as pd
 import os
-
+import sys
 
 cols = ["id", "true.spec.r", "true.spec.g", "true.spec.b", "true.spec.act_lum",
         "true.spec.est_lum", "true.diff.r", "true.diff.g", "true.diff.b",
@@ -8,8 +8,11 @@ cols = ["id", "true.spec.r", "true.spec.g", "true.spec.b", "true.spec.act_lum",
         "false.spec.act_lum", "false.spec.est_lum", "false.diff.r", "false.diff.g", "false.diff.b",
         "false.diff.act_lum", "false.diff.est_lum"]
 
+OUTPUT = sys.argv[1]
+
 data = []
-os.chdir("./results/data")
+os.chdir(f"{OUTPUT}data")
+print(os.getcwd())
 for i in os.listdir():
     csv = pd.DataFrame(data=pd.read_csv(i))
     data.append(csv.values[0])
