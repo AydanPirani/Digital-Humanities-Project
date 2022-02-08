@@ -1,14 +1,22 @@
+INPUT = images/
+OUTPUT = results/
+
 results/data/%.csv : images/%.jpg
-	python3 driver.py ${@F}
+	mkdir -p ${INPUT} ${OUTPUT}/data ${OUTPUT}/imgs
+	echo "Main!"
+	echo "${INPUT}${basename ${@F}}.jpg"
+	python3 driver.py ${INPUT}${basename ${@F}}.jpg ${OUTPUT}
 
 ALLFILES=$(subst images/, results/data/, $(wildcard images/*.jpg))
 
 exec: ${ALLFILES:.jpg=.csv}
-	python3 aggregator.py
+	touch ${OUTPUT}results.csv
+	python3 aggregator.py ${OUTPUT}
+
 
 clean:
-	rm -rf ./results/data/*.csv
-	rm ./results/results.csv
+	rm -rf ${OUTPUT}/data/*.csv
+	rm ${OUTPUT}/results.csv
 
 .DEFAULT_GOAL := exec
 
