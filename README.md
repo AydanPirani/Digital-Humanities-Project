@@ -3,8 +3,10 @@ Source code for digital humanities project conducted at UIUC.
 
 
 ## Setup
-
 To ensure consistency across platforms, the source code is run through a Docker container (an image can be built with the included Dockerfile).
+
+Note: For a local environment setup, the essential Python dependencies are present in environment.yml. If these packages are already present on your computer (or available to install locally), the Docker image and conda environment are unnecessary.
+
 
 The following command starts the environment, when run from within the Docker container: 
 
