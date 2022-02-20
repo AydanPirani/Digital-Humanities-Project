@@ -1,3 +1,6 @@
+import os
+import shutil
+
 import cv2
 import mediapipe as mp
 import numpy as np
@@ -47,11 +50,12 @@ class SkinDetector:
         df.to_csv(f"./results/data/{img_id}.csv", index=False)
 
 
-    def process(self, img_id, img_path, params={}):
+    def process(self, img_id, img_path, output, params={}):
+        print(f"HERE, INPUT={img_path}, OUTPUT={output}")
         points_threshold = params.get("points_threshold", 20)
         display_points = params.get("display_points", False)
         use_stdevs = params.get("use_stdevs", False)
-        max_faces = params.get("max_faces", 1)
+        max_faces = params.get("max_faces", 7)
 
         faceMesh = mp.solutions.face_mesh.FaceMesh(max_num_faces=max_faces)
 
@@ -59,14 +63,29 @@ class SkinDetector:
 
         results = faceMesh.process(img)
 
-        if results.multi_face_landmarks:
-            # Pull skin patches given the image (using Google MP)
-            patches = self.get_points(img, results.multi_face_landmarks, points_threshold, use_stdevs)
+        image_diff_img = np.zeros(img.shape, dtype=np.uint8)
+        image_spec_img = np.zeros(img.shape, dtype=np.uint8)
+        image_patch_img = img.copy()
+        image_invert_img = np.zeros(img.shape, dtype=np.uint8)
 
+        num_faces = 0
+
+        if results.multi_face_landmarks:
+            os.chdir(f"{output}{img_id}")
+        else:
+            return
+
+        for face_landmarks in results.multi_face_landmarks:
+            shutil.rmtree(f"face{num_faces + 1}", ignore_errors=True)
+            os.mkdir(f"face{num_faces + 1}")
+
+            # pull skin patches given the image (using google mp)
+            face = np.array([{"x": res.x, "y": res.y} for res in face_landmarks.landmark])
+            patches = self.get_points(img, face, points_threshold, use_stdevs)
             diff_comp = np.array([0, 0, 0], dtype=float)
             spec_comp = np.array([0, 0, 0], dtype=float)
 
-            # Calculate average color and luminance difference of each skin patch
+            # calculate average color and luminance difference of each skin patch
             for p in patches:
                 patch_diff, patch_spec = self.calculate_color(img, p)
 
@@ -75,13 +94,44 @@ class SkinDetector:
 
             diff_comp = np.around(diff_comp / len(patches), 3)
             spec_comp = np.around(spec_comp / len(patches), 3)
-            print("78:", diff_comp, spec_comp)
             self.diff = diff_comp
-
+            self.patches = []
             if display_points:
-                utilities.display_points(img, patches, img_id, self.diff)
+                face_diff_img = np.zeros(img.shape, dtype=np.uint8)
+                face_spec_img = np.zeros(img.shape, dtype=np.uint8)
+                face_patch_img = img.copy()
+                face_invert_img = np.zeros(img.shape, dtype=np.uint8)
+                for p in patches:
+                    for x, y in p:
+                        pt = img[x, y].copy()
+                        face_diff_img[x, y] = diff_comp
+                        face_spec_img[x, y] = spec_comp
+                        face_patch_img[x, y] = [0, 0, 0]
+                        face_invert_img[x, y] = pt
 
-            return {"spec": spec_comp, "diff": diff_comp}
+                        image_diff_img[x, y] = diff_comp
+                        image_spec_img[x, y] = spec_comp
+                        image_patch_img[x, y] = [0, 0, 0]
+                        image_invert_img[x, y] = pt
+
+                face_diff_img = cv2.cvtColor(face_diff_img, cv2.COLOR_BGR2RGB)
+                face_spec_img = cv2.cvtColor(face_spec_img, cv2.COLOR_BGR2RGB)
+                face_patch_img = cv2.cvtColor(face_patch_img, cv2.COLOR_BGR2RGB)
+                face_invert_img = cv2.cvtColor(face_invert_img, cv2.COLOR_BGR2RGB)
+                cv2.imwrite(f"face{num_faces+1}/{img_id}_FACE{num_faces + 1}_DIFF.jpg", face_diff_img)
+                cv2.imwrite(f"face{num_faces+1}/{img_id}_FACE{num_faces + 1}_SPEC.jpg", face_spec_img)
+                cv2.imwrite(f"face{num_faces+1}/{img_id}_FACE{num_faces + 1}_PATCH.jpg", face_patch_img)
+                cv2.imwrite(f"face{num_faces+1}/{img_id}_FACE{num_faces + 1}_INVERT.jpg", face_invert_img)
+
+        if display_points:
+            image_diff_img = cv2.cvtColor(image_diff_img, cv2.COLOR_BGR2RGB)
+            image_spec_img = cv2.cvtColor(image_spec_img, cv2.COLOR_BGR2RGB)
+            image_patch_img = cv2.cvtColor(image_patch_img, cv2.COLOR_BGR2RGB)
+            image_invert_img = cv2.cvtColor(image_invert_img, cv2.COLOR_BGR2RGB)
+            cv2.imwrite(f"{img_id}_DIFF.jpg", image_diff_img)
+            cv2.imwrite(f"{img_id}_SPEC.jpg", image_spec_img)
+            cv2.imwrite(f"{img_id}_PATCH.jpg", image_patch_img)
+            cv2.imwrite(f"{img_id}_INVERT.jpg", image_invert_img)
 
     # Given an image and points to take measurements from, return "valid" points in the image
     def get_points(self, img, landmarks, threshold, use_stdevs):
@@ -125,10 +175,8 @@ class SkinDetector:
 
         transformed = KPCA_model.fit_transform(X)
         skin_color = np.multiply(transformed, H)  # Array of size 2 x 3, row[specular] = 0, 0, 0
-        print(skin_color)
         diffuse_comp = [abs(i) for i in skin_color[diffuse]]
 
-        print("124:", diffuse_comp, specular_comp)
         return diffuse_comp, specular_comp
 
 
