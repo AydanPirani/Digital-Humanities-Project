@@ -76,8 +76,9 @@ class SkinDetector:
             return
 
         for face_landmarks in results.multi_face_landmarks:
-            shutil.rmtree(f"face{num_faces + 1}", ignore_errors=True)
-            os.mkdir(f"face{num_faces + 1}")
+            num_faces += 1
+            shutil.rmtree(f"face{num_faces}", ignore_errors=True)
+            os.mkdir(f"face{num_faces}")
 
             # pull skin patches given the image (using google mp)
             face = np.array([{"x": res.x, "y": res.y} for res in face_landmarks.landmark])
@@ -118,10 +119,10 @@ class SkinDetector:
                 face_spec_img = cv2.cvtColor(face_spec_img, cv2.COLOR_BGR2RGB)
                 face_patch_img = cv2.cvtColor(face_patch_img, cv2.COLOR_BGR2RGB)
                 face_invert_img = cv2.cvtColor(face_invert_img, cv2.COLOR_BGR2RGB)
-                cv2.imwrite(f"face{num_faces+1}/{img_id}_FACE{num_faces + 1}_DIFF.jpg", face_diff_img)
-                cv2.imwrite(f"face{num_faces+1}/{img_id}_FACE{num_faces + 1}_SPEC.jpg", face_spec_img)
-                cv2.imwrite(f"face{num_faces+1}/{img_id}_FACE{num_faces + 1}_PATCH.jpg", face_patch_img)
-                cv2.imwrite(f"face{num_faces+1}/{img_id}_FACE{num_faces + 1}_INVERT.jpg", face_invert_img)
+                cv2.imwrite(f"face{num_faces}/{img_id}_FACE{num_faces}_DIFF.jpg", face_diff_img)
+                cv2.imwrite(f"face{num_faces}/{img_id}_FACE{num_faces}_SPEC.jpg", face_spec_img)
+                cv2.imwrite(f"face{num_faces}/{img_id}_FACE{num_faces}_PATCH.jpg", face_patch_img)
+                cv2.imwrite(f"face{num_faces}/{img_id}_FACE{num_faces}_INVERT.jpg", face_invert_img)
 
         if display_points:
             image_diff_img = cv2.cvtColor(image_diff_img, cv2.COLOR_BGR2RGB)
