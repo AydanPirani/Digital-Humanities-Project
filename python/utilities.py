@@ -1,6 +1,7 @@
 import numpy as np
 from matplotlib.path import Path
 import cv2
+import os
 
 # Landmarks for each point, obtained via https://github.com/google/mediapipe/issues/1615
 FOREHEAD_POINTS = [251, 284, 332, 297, 338, 10, 109, 67, 103, 54, 21, 162, 139, 70, 63, 105, 66, 107,
@@ -100,8 +101,8 @@ def generate_patches(img, landmarks, pointList):
     patch = []
     for i in pointList:
         point = landmarks[i]
-        x_coord = int(i_w * point.x)
-        y_coord = int(i_h * point.y)
+        x_coord = int(i_w * point["x"])
+        y_coord = int(i_h * point["y"])
 
         patch.append((x_coord, y_coord))
         x_left, x_right = min(x_left, x_coord), max(x_right, x_coord)
@@ -110,55 +111,54 @@ def generate_patches(img, landmarks, pointList):
 
 
 # inner function to get patches
-def get_patches(img, landmarks):
-    for faceLms in landmarks[:1]:
-        # List of all the landmark coordinates from the generated face
+def get_patches(img, face_landmarks):
+    # Setting up patches for each body part
+    forehead_landmarks = generate_patches(img, face_landmarks, FOREHEAD_POINTS)
+    lcheek_landmarks = generate_patches(img, face_landmarks, LCHEEK_POINTS)
+    rcheek_landmarks = generate_patches(img, face_landmarks, RCHEEK_POINTS)
 
-        # Setting up patches for each body part
-        forehead_landmarks = generate_patches(img, faceLms.landmark, FOREHEAD_POINTS)
-        lcheek_landmarks = generate_patches(img, faceLms.landmark, LCHEEK_POINTS)
-        rcheek_landmarks = generate_patches(img, faceLms.landmark, RCHEEK_POINTS)
+    # Generating MPL paths for each patch - used to iterate pixels
+    forehead_path = Path(forehead_landmarks)
+    lcheek_path = Path(lcheek_landmarks)
+    rcheek_path = Path(rcheek_landmarks)
 
-        # Generating MPL paths for each patch - used to iterate pixels
-        forehead_path = Path(forehead_landmarks)
-        lcheek_path = Path(lcheek_landmarks)
-        rcheek_path = Path(rcheek_landmarks)
+    # # Array of all pixels in the given area
+    f_pts, r_pts, l_pts = [], [], []
 
-        # # Array of all pixels in the given area
-        f_pts, r_pts, l_pts = [], [], []
-
-        # Iterate through all pixels in image, check if pixel in path, then add
-        for y in range(y_up, y_down + 1):
-            for x in range(x_left, x_right + 1):
-                # Check if point in the given shape - if so, add to array
-                if forehead_path.contains_point((x, y)):
-                    f_pts.append((y, x))
-                elif lcheek_path.contains_point((x, y)):
-                    l_pts.append((y, x))
-                elif rcheek_path.contains_point((x, y)):
-                    r_pts.append((y, x))
+    # Iterate through all pixels in image, check if pixel in path, then add
+    for y in range(y_up, y_down + 1):
+        for x in range(x_left, x_right + 1):
+            # Check if point in the given shape - if so, add to array
+            if forehead_path.contains_point((x, y)):
+                f_pts.append((y, x))
+            elif lcheek_path.contains_point((x, y)):
+                l_pts.append((y, x))
+            elif rcheek_path.contains_point((x, y)):
+                r_pts.append((y, x))
 
     return [f_pts, l_pts, r_pts]
 
 
 # Given an array of points, draw the points on the provided image and create a copy
-def display_points(img, points, name, diff):
+def display_points(img, patches, name, diff):
     print(diff)
     shape = img.shape
 
-    image = img.copy()
-    invert = np.zeros(shape, dtype=np.uint8)
-    diffuse = np.zeros(shape, dtype=np.uint8)
+    patches_img = np.zeros(shape, dtype=np.uint8)
+    invert_img = np.zeros(shape, dtype=np.uint8)
 
-    for i in range(len(diff)):
-        diff[i] = min(255, int(diff[i]))
+    for face in patches:
 
-    for patch in points:
-        for y, x in patch:
-            temp = image[y, x].copy()
-            image[y, x] = [0, 0, 0]
-            invert[y, x] = temp
-            diffuse[y, x] = diff.copy()
+
+        for i in range(len(diff)):
+            diff[i] = min(255, int(diff[i]))
+
+        for patch in points:
+            for y, x in patch:
+                temp = image[y, x].copy()
+                image[y, x] = [0, 0, 0]
+                invert[y, x] = temp
+                diffuse[y, x] = diff.copy()
 
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     invert = cv2.cvtColor(invert, cv2.COLOR_BGR2RGB)

@@ -2,9 +2,9 @@ INPUT = images/
 OUTPUT = results/
 
 results/data/%.csv : images/%.jpg
-	mkdir -p ${INPUT} ${OUTPUT}/data ${OUTPUT}/imgs
-	echo "Main!"
+	mkdir -p ${INPUT} ${OUTPUT}${basename ${@F}}
 	echo "${INPUT}${basename ${@F}}.jpg"
+	echo "${OUTPUT}"
 	python3 driver.py ${INPUT}${basename ${@F}}.jpg ${OUTPUT}
 
 ALLFILES=$(subst images/, results/data/, $(wildcard images/*.jpg))
