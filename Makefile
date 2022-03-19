@@ -1,13 +1,13 @@
 INPUT = images/
 OUTPUT = results/
 
-results/data/%.csv : images/%.jpg
+${OUTPUT}%.csv : ${INPUT}%.jpg
 	mkdir -p ${INPUT} ${OUTPUT}${basename ${@F}}
 	echo "${INPUT}${basename ${@F}}.jpg"
 	echo "${OUTPUT}"
 	python3 driver.py ${INPUT}${basename ${@F}}.jpg ${OUTPUT}
 
-ALLFILES=$(subst images/, results/data/, $(wildcard images/*.jpg))
+ALLFILES=$(subst ${INPUT}, ${OUTPUT}, $(wildcard ${INPUT}*.jpg))
 
 exec: ${ALLFILES:.jpg=.csv}
 	touch ${OUTPUT}results.csv
@@ -15,8 +15,8 @@ exec: ${ALLFILES:.jpg=.csv}
 
 
 clean:
-	rm -rf ${OUTPUT}/data/*.csv
-	rm ${OUTPUT}/results.csv
+	rm -rf ${OUTPUT}
+	rm ${OUTPUT}
 
 .DEFAULT_GOAL := exec
 

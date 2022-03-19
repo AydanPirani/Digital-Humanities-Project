@@ -1,6 +1,6 @@
-import pandas as pd
 import os
 import sys
+import pandas as pd
 
 cols = ["id", "true.spec.r", "true.spec.g", "true.spec.b", "true.spec.act_lum",
         "true.spec.est_lum", "true.diff.r", "true.diff.g", "true.diff.b",
@@ -18,5 +18,4 @@ for i in os.listdir():
     data.append(csv.values[0])
 
 df = pd.DataFrame(columns=cols, data=data)
-df.to_csv(f"../results.csv", index=False)
-
+df.to_csv("../results.csv", index=False)

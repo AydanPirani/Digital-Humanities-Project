@@ -2,7 +2,6 @@ import sys
 from python.SkinDetector import SkinDetector
 
 s = SkinDetector()
-
 INPUT = sys.argv[1]
 OUTPUT = sys.argv[2]
 
