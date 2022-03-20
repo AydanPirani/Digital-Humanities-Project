@@ -11,11 +11,18 @@ cols = ["id", "true.spec.r", "true.spec.g", "true.spec.b", "true.spec.act_lum",
 OUTPUT = sys.argv[1]
 
 data = []
-os.chdir(f"{OUTPUT}data")
-print(os.getcwd())
-for i in os.listdir():
-    csv = pd.DataFrame(data=pd.read_csv(i))
-    data.append(csv.values[0])
-
 df = pd.DataFrame(columns=cols, data=data)
-df.to_csv("../results.csv", index=False)
+
+os.chdir(f"{OUTPUT}")
+for i in os.listdir():
+    if i[0] != "." and os.path.isdir(i) :
+        csv = pd.DataFrame(data=pd.read_csv(f"{i}/{i}_results.csv"))
+        # data.append(csv.values)
+        for j in range(len(csv)):
+            csv.iloc[j, 0] = f"{i}_{csv.iloc[j, 0]}"
+        print(csv)
+        df = df.append(csv)
+
+# print(data)
+# print(df)
+df.to_csv("./results.csv", index=False)

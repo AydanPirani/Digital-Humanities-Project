@@ -3,14 +3,13 @@ OUTPUT = results/
 
 ${OUTPUT}%.csv : ${INPUT}%.jpg
 	mkdir -p ${INPUT} ${OUTPUT}${basename ${@F}}
-	echo "${INPUT}${basename ${@F}}.jpg"
-	echo "${OUTPUT}"
+# 	echo "${INPUT}${basename ${@F}}.jpg"
+# 	echo "${OUTPUT}"
 	python3 driver.py ${INPUT}${basename ${@F}}.jpg ${OUTPUT}
 
 ALLFILES=$(subst ${INPUT}, ${OUTPUT}, $(wildcard ${INPUT}*.jpg))
 
 exec: ${ALLFILES:.jpg=.csv}
-	touch ${OUTPUT}results.csv
 	python3 aggregator.py ${OUTPUT}
 
 
